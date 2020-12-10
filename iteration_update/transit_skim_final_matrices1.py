@@ -76,7 +76,7 @@ with open(embank,'r+b') as f:
     f.seek(offst, 0)
     a1.fromfile(f,80)
     mcent = a1[51]              ## maximum number of centroids defined in emmebank
-    print "\tREADING EMMEBANK: {0} Centroids".format(str(mcent),)
+    print("\tREADING EMMEBANK: {0} Centroids".format(str(mcent),))
 
     # ## Read Project title from File 2 ##
     offst = a0[104] * 4
@@ -176,12 +176,12 @@ outFl = open(stats, 'a')
 outFl.write("\n\n {0:=^100}\n\n".format('=',))
 
 for m in outmtx:
-	mtxlist[x].tofile(outmtx[x])
-	(fpath, fname) = os.path.split(outmtx[x])
-	outFl.write("{0} Written Successfully.\n".format(fname, ))
-	outFl.write("\t-- Minimum = {0:.4f}\n\t-- Maximum = {1:0.4f}\n\t-- Mean = {2:0.4f}\n\t-- Sum = {3:0.4f}\n\n".format(min(mtxlist[x]), max(mtxlist[x]), sum(mtxlist[x])/len(mtxlist[x]), sum(mtxlist[x])))
-	x += 1
+    mtxlist[x].tofile(outmtx[x])
+    (fpath, fname) = os.path.split(outmtx[x])
+    outFl.write("{0} Written Successfully.\n".format(fname, ))
+    outFl.write("\t-- Minimum = {0:.4f}\n\t-- Maximum = {1:0.4f}\n\t-- Mean = {2:0.4f}\n\t-- Sum = {3:0.4f}\n\n".format(min(mtxlist[x]), max(mtxlist[x]), sum(mtxlist[x])/len(mtxlist[x]), sum(mtxlist[x])))
+    x += 1
 
 outFl.close()
 
-print "-- TRANSIT SKIM MATRICES CREATED --"
+print("-- TRANSIT SKIM MATRICES CREATED --")
