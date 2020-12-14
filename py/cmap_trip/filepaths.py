@@ -17,6 +17,7 @@ class FileNames:
 			if not os.path.exists(cache_dir):
 				os.makedirs(cache_dir)
 		self.cache_dir = cache_dir
+		self.zone_shapefile = None
 
 	def __getattr__(self, item):
 		if item[-6:] == "_DISTR":
@@ -35,14 +36,18 @@ class FileNames:
 		raise AttributeError(item)
 
 	def save(self, name, data):
-		if isinstance(data, pd.DataFrame):
-			if self.cache_dir:
-				pth = self.cache_dir / f"{name}.pq"
+		try:
+			if isinstance(data, pd.DataFrame):
+				if self.cache_dir:
+					pth = self.cache_dir / f"{name}.pq"
+				else:
+					pth = f"{name}.pq"
+				data.to_parquet(pth)
 			else:
-				pth = f"{name}.pq"
-			data.to_parquet(pth)
-		else:
-			raise TypeError(str(type(data)))
+				raise TypeError(str(type(data)))
+		except Exception as err:
+			import warnings
+			warnings.warn(f"failed to save {name}: {err}")
 
 	def load(self, name):
 		if self.cache_dir:
@@ -77,6 +82,10 @@ def set_cache_dir(cache_dir):
 			os.makedirs(filenames.cache_dir)
 	else:
 		filenames.cache_dir = None
+
+def set_zone_shapefile(shpfilename):
+	global filenames
+	filenames.zone_shapefile = Path(shpfilename)
 
 def save(*args):
 	global filenames

@@ -6,7 +6,7 @@ from .m023_handler import m023
 from .m01_handler import m01
 from .distr_handler import distr
 from .ae_distance_sim import simulate_ae_dist
-from .omx_handler import first_mode_peak, first_mode_offpeak, last_mode_peak, last_mode_offpeak
+from .skims_handler import first_mode_peak, first_mode_offpeak, last_mode_peak, last_mode_offpeak
 from .random_states import check_random_state
 
 # trip types

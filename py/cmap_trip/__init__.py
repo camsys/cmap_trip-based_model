@@ -49,4 +49,4 @@ def log_to_stderr(level=30):
     return logger
 
 
-from .filepaths import set_database_dir, set_skims_dir, set_cache_dir
+from .filepaths import set_database_dir, set_skims_dir, set_cache_dir, set_zone_shapefile
