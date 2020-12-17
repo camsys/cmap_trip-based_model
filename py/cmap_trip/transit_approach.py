@@ -47,7 +47,7 @@ SPDWLK = 30
 # SPDWLK = SYSTEM-WIDE SPEED OF WALKING,
 #          DEFAULT IS 30 TENTHS OF A MILE PER HOUR
 
-SPEEDS = [7, 15, 20, 30, 5, 10, 12, 17]
+SPEEDS = np.array([7, 15, 20, 30, 5, 10, 12, 17])
 # SPEEDS = SPEEDS OF APPROACH AUTO AND BUS BY ZONE AREA TYPE
 #          AUTO APPROACH SPEEDS:
 #            ZONE TYPE 1 (CHICAGO CBD) DEFAULT IS 7 MPH
@@ -62,6 +62,9 @@ SPEEDS = [7, 15, 20, 30, 5, 10, 12, 17]
 
 DRVOT = 14
 # DRVOT  = DRIVER'S VALUE OF TIME, DEFAULT IS 14 CENTS/MIN
+
+OVT_IVT_RATIO = 2.0
+
 
 PACE_BUS_BOARDING_FARE = m023.PACE_BUS_BOARDING_FARE
 PACE_BUS_FIRST_XFER_FARE = m023.PACE_BUS_FIRST_XFER_FARE
@@ -107,8 +110,19 @@ def _simulate_approach_distances(
 		with shape [replications, N_APPROACH_MODES, ]
 
 	"""
+	if not isinstance(zone, int):
+		return _simulate_approach_distances_arr(
+			zone,
+			attached_mode,
+			trip_purpose,
+			trip_end,
+			out,
+			random_state=random_state,
+		)
 	random_state = check_random_state(random_state)
-	replication = out.shape[0]
+	replication = list(out.shape[:-1])
+	if replication[0] == 1:
+		replication = replication[1:]
 	for J in range(N_DIST_TO_TYPES):
 		# OBTAIN APPROACH DISTANCES TO FIVE MODES
 		if (J == DIST_TO_BUS):
@@ -140,10 +154,72 @@ def _simulate_approach_distances(
 		else:
 			raise ValueError(J)
 		if distr_params[2] != 999:
-			out[:,J] = simulate_ae_dist(*distr_params, replication=replication, random_state=random_state)
+			out[...,J] = simulate_ae_dist(*distr_params, replication=replication, random_state=random_state)
 		else:
-			out[:,J] = 255.0
+			out[...,J] = 255.0
 
+
+def _simulate_approach_distances_arr(
+		zone,
+		attached_mode,
+		trip_purpose,
+		trip_end,
+		out,
+		random_state=None,
+):
+	"""
+
+	Parameters
+	----------
+	zone : array-like
+		Zone id (1-based)
+	attached_mode : int
+		Number for first or last mode (as matches this approach)
+	trip_purpose : {'HW','HO','NH'}
+		Trip purpose, used to select DISTR table and possibly filter
+		approach modes
+	trip_end : {0,1}
+		Zero if approach to first mode, one if approach from last mode
+	out : array-like
+		Output array must already exist, as a float dtype,
+		with shape [replications, N_APPROACH_MODES, ]
+
+	"""
+	random_state = check_random_state(random_state)
+	replication = list(out.shape[1:-1])
+	distr_df = distr[trip_purpose].unstack().loc[zone]
+	for J in range(N_DIST_TO_TYPES):
+		# OBTAIN APPROACH DISTANCES TO FIVE MODES
+		if (J == DIST_TO_BUS):
+			distr_params = distr_df.xs('bus', level='submode', axis=1).copy()
+		elif (J == DIST_TO_CTA_RAIL):
+			# DISTANCE OBTAINED ONLY IF FIRST/LAST MODE IS CTA RAIL
+			distr_params = distr_df.xs('ctarail', level='submode', axis=1).copy()
+			distr_params.loc[attached_mode != TransitModeCode_CTA_RAIL,:] = 999
+		elif (J == DIST_TO_METRA):
+			# DISTANCE OBTAINED ONLY IF FIRST/LAST MODE IS METRA
+			distr_params = distr_df.xs('metra', level='submode', axis=1).copy()
+			distr_params.loc[attached_mode != TransitModeCode_METRA_RAIL,:] = 999
+		elif (J == DIST_TO_FEEDER_BUS):
+			# DISTANCE OBTAINED ONLY IF FIRST/LAST MODE IS METRA
+			distr_params = distr_df.xs('feederbus', level='submode', axis=1).copy()
+			distr_params.loc[attached_mode != TransitModeCode_METRA_RAIL,:] = 999
+		elif (J == DIST_TO_PARK_N_RIDE_STATION):
+			# PARK AND RIDE STATION DISTANCE OBTAINED WHEN TRIP END IS FRONT
+			if trip_end == FRONT_END:
+				distr_params = distr_df.xs('pnr', level='submode', axis=1).copy()
+			else:
+				distr_params.loc[:,:] = 999
+		else:
+			raise ValueError(J)
+		_temp = simulate_ae_dist(
+			distr_params.p1,
+			distr_params.p2,
+			distr_params.p3,
+			replication=replication,
+			random_state=random_state,
+		)
+		out[..., J] = _temp
 
 
 # def simulate_approach_distances_222(ozone, dzone, firstmode, lastmode, trip_purpose):
@@ -202,8 +278,8 @@ def transit_approach(
 
 	Parameters
 	----------
-	ozone, dzone : int
-		Zone ID numbers
+	ozone, dzone : int or array-like
+		Zone ID numbers.  If array-like, should be arrays of the same shape.
 	TPTYPE : {'HW', 'HO', 'NH'}
 		Trip type
 	replication : int
@@ -221,6 +297,12 @@ def transit_approach(
 		simulated approach waiting times
 	best_approach_mode : array of int8, shape [replication, 2]
 		simulated best approach modes
+	approach_distances : array of float32, shape [replication, N_DIST_TO_TYPES, N_TRIP_ENDS]
+
+	Notes
+	-----
+	When ozone, dzone are given as arrays, all returned arrays have one extra front
+	dimension matching these arrays.
 
 	"""
 	random_state = check_random_state(random_state or ozone+dzone)
@@ -231,10 +313,24 @@ def transit_approach(
 	if trace:
 		log.log(trace, f"transit_approach({ozone},{dzone},{TPTYPE},{replication})")
 
+	# convert inputs to length-1 vectors if not already vectors
+	if isinstance(ozone, int):
+		ozone_ = ozone
+		ozone = np.array([ozone])
+	else:
+		ozone_ = ozone = np.asanyarray(ozone)
+	if isinstance(dzone, int):
+		dzone_ = dzone
+		dzone = np.array([dzone])
+	else:
+		dzone_ = dzone = np.asanyarray(dzone)
+	vector_len = ozone.shape[0]
+	assert vector_len == dzone.shape[0]
+
 	ozone_idx = ozone-1
 	dzone_idx = dzone-1
 
-	m01_df = m01[TPTYPE]
+	m01_df = m01.HW
 	ZTYPE = m01_df['zone_type'] # integers 1-4
 	if TPTYPE == HW:
 		fwbus = m01_df['first_wait_bus_peak'] # FIRST WAIT FOR BUS IN APPROACH SUBMODEL
@@ -242,21 +338,21 @@ def transit_approach(
 	else:
 		fwbus = m01_df['first_wait_bus_offpeak'] # FIRST WAIT FOR BUS IN APPROACH SUBMODEL
 		fwfdr = m01_df['first_wait_feeder_offpeak'] # FIRST WAIT FOR FEEDER BUS IN APPROACH SUBMODEL
-	PNRAVL = m01_df['pnr_flag'] # park-n-ride available, by zone
+	PNRAVL = m01_df['pnr_flag'].astype(bool) # park-n-ride available, by zone
 	PRCOST = m01_df['pnr_parking_cost'] # park-n-ride cost, by zone
 
 	# -- INITIALIZE VALUES --
-	approach_cost = np.zeros([replication, N_APPROACH_MODES], dtype=np.float32)
-	approach_waittime = np.zeros([N_APPROACH_MODES], dtype=np.float32)
-	approach_drivetime = np.zeros([replication, N_APPROACH_MODES], dtype=np.float32)
-	approach_walktime = np.zeros([replication, N_APPROACH_MODES], dtype=np.float32)
-	TVAR4 = np.zeros([replication, 5], dtype=np.float32)
+	approach_cost = np.zeros([vector_len, replication, N_APPROACH_MODES], dtype=np.float32)
+	approach_waittime = np.zeros([vector_len, replication, N_APPROACH_MODES], dtype=np.float32)
+	approach_drivetime = np.zeros([vector_len, replication, N_APPROACH_MODES], dtype=np.float32)
+	approach_walktime = np.zeros([vector_len, replication, N_APPROACH_MODES], dtype=np.float32)
+	TVAR4 = np.zeros([vector_len, replication, 5], dtype=np.float32)
 
-	best_approach_mode = np.zeros([replication, N_TRIP_ENDS], dtype=np.int8)
-	best_cost = np.zeros([replication, N_TRIP_ENDS], dtype=np.int32)
-	best_waittime = np.zeros([replication, N_TRIP_ENDS], dtype=np.int32)
-	best_walktime = np.zeros([replication, N_TRIP_ENDS], dtype=np.int32)
-	best_drivetime = np.zeros([replication, N_TRIP_ENDS], dtype=np.int32)
+	best_approach_mode = np.zeros([vector_len, replication, N_TRIP_ENDS], dtype=np.int8)
+	best_cost = np.zeros([vector_len, replication, N_TRIP_ENDS], dtype=np.int32)
+	best_waittime = np.zeros([vector_len, replication, N_TRIP_ENDS], dtype=np.int32)
+	best_walktime = np.zeros([vector_len, replication, N_TRIP_ENDS], dtype=np.int32)
+	best_drivetime = np.zeros([vector_len, replication, N_TRIP_ENDS], dtype=np.int32)
 	#
 	#     GET ZONE TYPES
 	#
@@ -277,52 +373,58 @@ def transit_approach(
 	#     AS MODE=5 DUE TO ARRAY SIZE LIMITS.  IF MODE=5 AND
 	#     ZONE TYPE NO. 1 IS OUTSIDE OF CHICAGO, THEN CHANGE MODE TO 6.
 	#
-	if (FM == 5 and ozone_type > 2):
-		FM = 6
-	if (LM == 5 and dzone_type > 2):
-		LM = 6
-	# DEBUGGING:      WRITE (*,'(A)') ' CHECK POINT 1 REACHED  '
+
+	FM[(FM == 5) & (ozone_type > 2)] = 6
+	LM[(LM == 5) & (ozone_type > 2)] = 6
+
+	# if (FM == 5 and ozone_type > 2):
+	# 	FM = 6
+	# if (LM == 5 and dzone_type > 2):
+	# 	LM = 6
+
 	#
 	#     GET APPROACH DISTANCES FOR FIRST AND LAST MODES
 	#
-	# DEBUGGING:        WRITE (31, '(A,10F8.4)')  '  RAN6 FOR ADIST IN TRAPP',
-	# DEBUGGING:  ARAN6(1),RAN6(2),RAN6(3),RAN6(4),RAN6(5),RAN6(6),RAN6(7),RAN6(8),
-	# DEBUGGING:       BRAN6(9),RAN6(10)
 
 	####      CALL ADIST(ozone,dzone,FM,LM)
 	if approach_distances is not None:
-		assert approach_distances.shape == [replication, N_DIST_TO_TYPES, N_TRIP_ENDS]
+		assert approach_distances.shape == [vector_len, replication, N_DIST_TO_TYPES, N_TRIP_ENDS]
 	else:
-		approach_distances = np.empty([replication, N_DIST_TO_TYPES, N_TRIP_ENDS])
-		_simulate_approach_distances(
-			ozone,
-			attached_mode=FM,
-			trip_purpose=TPTYPE,
-			trip_end=0,
-			out=approach_distances[:,:,0],
-			random_state=random_state,
-		)
-		_simulate_approach_distances(
-			dzone,
-			attached_mode=LM,
-			trip_purpose=TPTYPE,
-			trip_end=1,
-			out=approach_distances[:,:,1],
-			random_state=random_state,
-		)
+		approach_distances = np.empty([vector_len, replication, N_DIST_TO_TYPES, N_TRIP_ENDS])
+
+		for purpose in ['HW','HO','NH']:
+			this_purpose = (TPTYPE == purpose)
+			#z = np.empty([sum(this_purpose), replication, N_DIST_TO_TYPES, N_TRIP_ENDS])
+			_simulate_approach_distances(
+				ozone_,
+				attached_mode=FM,
+				trip_purpose=purpose,
+				trip_end=0,
+				out=approach_distances[:,:,:,0],
+				random_state=random_state,
+			)
+			_simulate_approach_distances(
+				dzone_,
+				attached_mode=LM,
+				trip_purpose=purpose,
+				trip_end=1,
+				out=approach_distances[:,:,:,1],
+				random_state=random_state,
+			)
+			# approach_distances[this_purpose,...] = z
 	if trace:
 		log.log(trace, f" PRODUCTION APPROACH DISTANCES")
-		log.log(trace, f"  to Bus    {approach_distances[:5,DIST_TO_BUS,0]}")
-		log.log(trace, f"  to El     {approach_distances[:5,DIST_TO_CTA_RAIL,0]}")
-		log.log(trace, f"  to Metra  {approach_distances[:5,DIST_TO_METRA,0]}")
-		log.log(trace, f"  to feeder {approach_distances[:5,DIST_TO_FEEDER_BUS,0]}")
-		log.log(trace, f"  to PnR    {approach_distances[:5,DIST_TO_PARK_N_RIDE_STATION,0]}")
+		log.log(trace, f"  to Bus    {approach_distances[:5,:5,DIST_TO_BUS,0]}")
+		log.log(trace, f"  to El     {approach_distances[:5,:5,DIST_TO_CTA_RAIL,0]}")
+		log.log(trace, f"  to Metra  {approach_distances[:5,:5,DIST_TO_METRA,0]}")
+		log.log(trace, f"  to feeder {approach_distances[:5,:5,DIST_TO_FEEDER_BUS,0]}")
+		log.log(trace, f"  to PnR    {approach_distances[:5,:5,DIST_TO_PARK_N_RIDE_STATION,0]}")
 		log.log(trace, f" ATTRACTION APPROACH DISTANCES")
-		log.log(trace, f"  to Bus    {approach_distances[:5,DIST_TO_BUS,1]}")
-		log.log(trace, f"  to El     {approach_distances[:5,DIST_TO_CTA_RAIL,1]}")
-		log.log(trace, f"  to Metra  {approach_distances[:5,DIST_TO_METRA,1]}")
-		log.log(trace, f"  to feeder {approach_distances[:5,DIST_TO_FEEDER_BUS,1]}")
-		log.log(trace, f"  to PnR    {approach_distances[:5,DIST_TO_PARK_N_RIDE_STATION,1]}")
+		log.log(trace, f"  to Bus    {approach_distances[:5,:5,DIST_TO_BUS,1]}")
+		log.log(trace, f"  to El     {approach_distances[:5,:5,DIST_TO_CTA_RAIL,1]}")
+		log.log(trace, f"  to Metra  {approach_distances[:5,:5,DIST_TO_METRA,1]}")
+		log.log(trace, f"  to feeder {approach_distances[:5,:5,DIST_TO_FEEDER_BUS,1]}")
+		log.log(trace, f"  to PnR    {approach_distances[:5,:5,DIST_TO_PARK_N_RIDE_STATION,1]}")
 
 
 	#     CHECK FIRST/LAST MODES AND COMPUTE APPROACH TIME AND COST
@@ -343,7 +445,7 @@ def transit_approach(
 			Z = dzone
 			M = LM
 
-		ZTYPE_Z = ZTYPE.iloc[Z]
+		ZTYPE_Z = ZTYPE.iloc[Z].values
 
 		#
 		#  IN THIS CASE WE ARE MAKING THE STATION PARKING COST FOR HOME BASED OTHER AND
@@ -357,7 +459,7 @@ def transit_approach(
 		#
 		# *******************  RWE CHANGE FOR I290 AUGUST-SEPT 2009  ************
 		#     SET HIGH STARTING VALUE OF TVAR5
-		TVAR5 = np.full([replication], 1.E10)
+		TVAR5 = np.full([vector_len,replication], 1.E10)
 		# *******************  RWE CHANGE FOR I290 AUGUST-SEPT 2009  ************
 		#     IN CALCULATING TVAR4 AND TVAR5
 		#       IN-VEHICLE TIME = DRVOT = 20 CENTS/MIN
@@ -368,62 +470,76 @@ def transit_approach(
 		#     FOLLOWING SECTION ADDED BY EASH TO SIMPLIFY LOGIC
 		#     IF M IS BUS (MODE<7) THEN ONLY POSSIBLE APPROACH COST IS TIME TO
 		#     WALK TO BUS.  OTHER APPROACH COSTS AND TIMES ARE LINE=HAUL.
-		if (M < 7):
+		t = (M < TransitModeCode_CTA_RAIL)
+		if np.any(t):
 			J = APPROACH_WALK
-			approach_walktime[:, 0] = approach_distances[:, DIST_TO_BUS, I] / SPDWLK * 600.
+			approach_walktime[t,:,J] = approach_distances[t,:, DIST_TO_BUS, I] / SPDWLK * 600.
 			# INCREASE WALK TIME IN CHICAGO CBD FOR WORK TRIPS
-			if (ZTYPE_Z == 1 and TPTYPE == HW):
-				approach_walktime[:, 0] = approach_walktime[:, 0] * 1.20
-			TVAR4[:, J] = approach_walktime[:, 0] * DRVOT * 2.0
-			TVAR5[:] = TVAR4[:, J]
-			best_approach_mode[:, I] = 0
-			best_drivetime[:, I] = 0
-			best_walktime[:, I] = approach_walktime[:, 0] + .5
-			best_cost[:, I] = 0
-			best_waittime[:, I] = 0
-			for J in [APPROACH_BUS, APPROACH_PARK_N_RIDE, APPROACH_KISS_N_RIDE, APPROACH_FEEDER_BUS]:
-				TVAR4[:, J] = 0.
-				approach_cost[:, J] = 0.
-				approach_waittime[J] = 0.
-				approach_drivetime[:, J] = 0.
-				approach_walktime[:, J] = 0.
+			cbd_work = t & (ZTYPE_Z == 1) & (TPTYPE == HW)
+			approach_walktime[cbd_work,:,J] *= 1.20
 
-		else:
+			# if (ZTYPE_Z == 1 and TPTYPE == HW):
+			# 	approach_walktime[:, 0] = approach_walktime[:, 0] * 1.20
+			TVAR4[t,:, J] = approach_walktime[t,:, 0] * DRVOT * 2.0
+			TVAR5[t,:] = TVAR4[t,:, J]
+			best_approach_mode[t,:, I] = 0
+			best_drivetime[t,:, I] = 0
+			best_walktime[t,:, I] = approach_walktime[t,:, 0] + .5
+			best_cost[t,:, I] = 0
+			best_waittime[t,:, I] = 0
+			for J in [APPROACH_BUS, APPROACH_PARK_N_RIDE, APPROACH_KISS_N_RIDE, APPROACH_FEEDER_BUS]:
+				TVAR4[t,:, J] = 0.
+				approach_cost[t, :, J] = 0.
+				approach_waittime[t, :, J] = 0.
+				approach_drivetime[t,:, J] = 0.
+				approach_walktime[t,:, J] = 0.
+
+		t = (M >= TransitModeCode_CTA_RAIL)
+		if np.any(t):
 			#     REMAINDER OF SUBROUTINE FOR RAIL TRANSIT/COMMUTER RAIL ONLY
 			#     GET VALUES FOR FIVE ALTERNATIVES
 			for J in range(5):
-				TVAR4[:, J] = 0.
-				approach_cost[:, J] = 0.
-				approach_waittime[J] = 0.
-				approach_drivetime[:, J] = 0.
-				approach_walktime[:, J] = 0.
+				TVAR4[t,:, J] = 0.
+				approach_cost[t, :, J] = 0.
+				approach_waittime[t,:,J] = 0.
+				approach_drivetime[t,:, J] = 0.
+				approach_walktime[t,:, J] = 0.
 
-				K = int(max(0, M - 6)) # 0 for BUS, 1 for CTA RAIL(7-1), 2 for METRA(8-1)
+				K = np.fmax(0, M - 6).astype(int) # 0 for BUS, 1 for CTA RAIL(7-1), 2 for METRA(8-1)
 
 				# = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
 				#     J=0(WALK).COMPUTE WALKING TIME TO FIRST MODE.NO COST OR IN-VEHICLE TIME
 				# = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
 				if J == APPROACH_WALK:
-					approach_walktime[:, J] = approach_distances[:, K, I] / SPDWLK * 600.
+					approach_walktime[t,:, J] = approach_distances[t,:, K[t], I] / SPDWLK * 600.
 					# INCREASE WALK TIME IN CHICAGO CBD FOR WORK TRIPS
-					if (ZTYPE_Z == 1 and TPTYPE == HW):
-						approach_walktime[:, J] = approach_walktime[:, J] * 1.20
-
-					TVAR4[:, J] = approach_walktime[:, J] * DRVOT * 2.0
+					cbd_work = t & (ZTYPE_Z == 1) & (TPTYPE == HW)
+					approach_walktime[cbd_work,:, J] *= 1.20
+					# if (ZTYPE_Z == 1 and TPTYPE == HW):
+					# 	approach_walktime[:, J] = approach_walktime[:, J] * 1.20
+					TVAR4[t,:, J] = approach_walktime[t,:, J] * DRVOT * 2.0
 					# ADD APPROACH TIMES AND COSTS - EVERYTHING SHOULD NOW BE IN CENTS
-					TVAR4[:, J] = TVAR4[:, J] + approach_cost[:, J]
+					TVAR4[t,:, J] += approach_cost[t, :, J]
 
 				# = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
 				#    J=1(BUS) FIRST MODE. COMPUTE WALKING TIME, COST, AND IN-VEHICLE TIME
 				# = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
-				elif J == APPROACH_BUS:
-					approach_walktime[:, J] = approach_distances[:, DIST_TO_BUS, I] / SPDWLK * 600.
-					# INCREASE WALK TIME IN CHICAGO CBD
-					if (ZTYPE_Z == 1):
-						approach_walktime[:, J] = approach_walktime[:, J] * 1.20
-					approach_waittime[J] = fwbus[Z]
-					approach_drivetime[:, J] = approach_distances[:, K, I] / SPEEDS[ZTYPE_Z-1 + 4] * 60.
-					TVAR4[:, J] = approach_walktime[:, J] * DRVOT * 2.0 + approach_drivetime[:, J] * DRVOT + approach_waittime[J] * DRVOT * 2.0
+				elif J == APPROACH_BUS or (J == APPROACH_FEEDER_BUS and I == FRONT_END):
+
+					if J == APPROACH_FEEDER_BUS:
+						approach_walktime[t,:, J] = approach_distances[t,:, DIST_TO_FEEDER_BUS, I] / SPDWLK * 600.
+						approach_waittime[t,:,J] = fwfdr[Z][t].values[:,np.newaxis]
+					else:
+						approach_walktime[t,:, J] = approach_distances[t,:, DIST_TO_BUS, I] / SPDWLK * 600.
+						# INCREASE WALK TIME IN CHICAGO CBD
+						approach_walktime[t & (ZTYPE_Z == 1), :, J] *= 1.20
+						approach_waittime[t,:,J] = fwbus[Z][t].values[:,np.newaxis]
+					approach_drivetime[t,:, J] = approach_distances[t,:, K[t], I] / SPEEDS[ZTYPE_Z[t]-1 + 4, np.newaxis] * 60.
+					TVAR4[t,:, J] = (
+							approach_walktime[t,:, J] * OVT_IVT_RATIO
+							+ approach_drivetime[t,:, J]
+							+ approach_waittime[t,:,J] * OVT_IVT_RATIO
+					) * DRVOT
 
 					# *******************  RWE CHANGE FOR I290 AUGUST-SEPT 2009  ************
 					#
@@ -432,196 +548,118 @@ def transit_approach(
 					#   ====  ORIGIN  ====
 					if (I == FRONT_END):
 						# FIRST MODE SUBURBAN RAIL - CHECK ZONE TYPE AT ORIGIN						
-						if (M == TransitModeCode_METRA_RAIL):
-							if (ozone_type > 2):
-								# --- SUBURBAN ORIGIN, PACE BUS ---
-								# PACE BUS - METRA RAIL, ADDED FARE IS PACE FEEDER BUS FARE
-								if (LM == TransitModeCode_METRA_RAIL):
-									approach_cost[:, J] = FEEDER_BUS_BOARDING_FARE
-								#     PACE BUS - METRA RAIL - CTA, NO ADDED FARE, LINKUP > FEEDER BUS
-								if _IS_CTA(LM):
-									approach_cost[:, J] = 0
-								# PACE BUS - METRA RAIL - PACE, ADDED FARE IS LINKUP LESS FEEDER BUS
-								if (LM == TransitModeCode_PACE_BUS):
-									approach_cost[:, J] = FEEDER_BUS_CBD_FARE
-								# ADD APPROACH TIMES AND COSTS - EVERYTHING SHOULD NOW BE IN CENTS
-								TVAR4[:, J] = TVAR4[:, J] + approach_cost[:, J]
-							else:
-								#   --- CHICAGO ORIGIN, CTA BUS ---
-								# CTA BUS - METRA RAIL, ADDED FARE IS LINKUP FARE (SINGLE RIDE)
-								if (LM == TransitModeCode_METRA_RAIL):
-									approach_cost[:, J] = CTA_CBD_LINK_UP_FARE
-								# CTA BUS - METRA RAIL - CTA, ADDED FARE IS CTA TRANSFER
-								if _IS_CTA(LM):
-									approach_cost[:, J] = CTA_FIRST_XFER_FARE
-								# CTA BUS - METRA RAIL - PACE, ADDED FARE IS LINKUP LESS FEEDER BUS
-								if (LM == TransitModeCode_PACE_BUS):
-									approach_cost[:, J] = FEEDER_BUS_CBD_FARE
-								# ADD APPROACH TIMES AND COSTS - EVERYTHING SHOULD NOW BE IN CENTS
-								TVAR4[:, J] = TVAR4[:, J] + approach_cost[:, J]
+						# --- SUBURBAN ORIGIN, PACE BUS ---
+						s = t & (FM == TransitModeCode_METRA_RAIL) & (ozone_type > 2)
+						if np.any(s):
+							# PACE BUS - METRA RAIL, ADDED FARE IS PACE FEEDER BUS FARE
+							approach_cost[s & (LM == TransitModeCode_METRA_RAIL), :, J] = FEEDER_BUS_BOARDING_FARE
+							#     PACE BUS - METRA RAIL - CTA, NO ADDED FARE, LINKUP > FEEDER BUS
+							# already zero # approach_cost[s & (LM == TransitModeCode_CTA_RAIL), :, J] = 0
+							# PACE BUS - METRA RAIL - PACE, ADDED FARE IS LINKUP LESS FEEDER BUS
+							approach_cost[s & (LM == TransitModeCode_PACE_BUS), :, J] = FEEDER_BUS_CBD_FARE
 
-						elif (LM < 7):
-							#     FIRST MODE CTA RAIL
-							#     WHEN THIS IS TRUE A FULL FARE AND TRANSFER HAVE
-							#     BEEN PAID, SO NO ADDED FARE IS NEEDED FOR BUS
-							TVAR4[:, J] = TVAR4[:, J] + approach_cost[:, J]
+						#   --- CHICAGO ORIGIN, CTA BUS ---
+						s = t & (FM == TransitModeCode_METRA_RAIL) & (ozone_type <= 2)
+						if np.any(s):
+							# CTA BUS - METRA RAIL, ADDED FARE IS LINKUP FARE (SINGLE RIDE)
+							approach_cost[s & (LM == TransitModeCode_METRA_RAIL), :, J] = CTA_CBD_LINK_UP_FARE
+							# CTA BUS - METRA RAIL - CTA, ADDED FARE IS CTA TRANSFER
+							approach_cost[s & (LM == TransitModeCode_CTA_RAIL), :, J] = CTA_FIRST_XFER_FARE
+							# CTA BUS - METRA RAIL - PACE, ADDED FARE IS LINKUP LESS FEEDER BUS
+							approach_cost[s & (LM == TransitModeCode_PACE_BUS), :, J] = FEEDER_BUS_CBD_FARE
+
+						# FIRST MODE CTA RAIL
+						#     WHEN THIS IS TRUE A FULL FARE AND TRANSFER HAVE
+						#     BEEN PAID, SO NO ADDED FARE IS NEEDED FOR BUS
+
 
 						# ORIGIN OTHER THAN CHICAGO, ADDED FARE IS NOW AN RTA TRANSFER
-						elif (ozone_type > 2):
-							approach_cost[:, J] = PACE_BUS_FIRST_XFER_FARE
-							TVAR4[:, J] = TVAR4[:, J] + approach_cost[:, J]
+						s = t & (FM < TransitModeCode_CTA_RAIL) & (ozone_type > 2)
+						if np.any(s):
+							approach_cost[s, :, J] = PACE_BUS_FIRST_XFER_FARE
 
 						# CHICAGO ORIGIN, ADDED FARE IS CTA TRANSFER
-						else:
-							approach_cost[:, J] = CTA_FIRST_XFER_FARE
-							TVAR4[:, J] = TVAR4[:, J] + approach_cost[:, J]
+						s = t & (FM < TransitModeCode_CTA_RAIL) & (ozone_type <= 2)
+						if np.any(s):
+							approach_cost[s, :, J] = CTA_FIRST_XFER_FARE
+
+						TVAR4[t, :, J] += approach_cost[t, :, J]
 
 
 					#   ====  DESTINATION  ====
 					else:
 						# LAST MODE SUBURBAN RAIL
-						if (M == TransitModeCode_METRA_RAIL):
-							if (dzone_type > 2):
-								#     SUBURBAN DESTINATION, PACE BUS
-								#     METRA RAIL - PACE BUS, ADDED FARE IS PACE FEEDER BUS FARE
-								if (FM == TransitModeCode_METRA_RAIL):
-									approach_cost[:, J] = FEEDER_BUS_BOARDING_FARE
-								#     CTA - METRA RAIL - PACE BUS,  NO ADDED FARE, LINKUP > FEEDER BUS
-								if _IS_CTA(FM):
-									approach_cost[:, J] = 0
-								#     PACE - METRA RAIL - PACE BUS, ADDED FARE IS LINKUP LESS FEEDER BUS
-								if (FM == TransitModeCode_PACE_BUS):
-									approach_cost[:, J] = FEEDER_BUS_CBD_FARE
-								TVAR4[:, J] = TVAR4[:, J] + approach_cost[:, J]
-							else:
-								#     CHICAGO DESTINATION, CTA BUS
-								#     METRA - CTA BUS, ADDED COST IS LINKUP FARE (SINGLE RIDE)
-								if (FM == TransitModeCode_METRA_RAIL):
-									approach_cost[:, J] = CTA_CBD_LINK_UP_FARE
-								#     CTA - METRA - CTA BUS, ADDED COST IS CTA TRANSFER
-								if _IS_CTA(FM):
-									approach_cost[:, J] = CTA_FIRST_XFER_FARE
-								#     PACE - METRA - CTA BUS, ADDED COST IS LINKUP MINUS FEEDER BUS
-								if (FM == TransitModeCode_PACE_BUS):
-									approach_cost[:, J] = FEEDER_BUS_CBD_FARE
-								TVAR4[:, J] = TVAR4[:, J] + approach_cost[:, J]
+						s = t & (LM == TransitModeCode_METRA_RAIL) & (dzone_type > 2)
+						if np.any(s):
+							#     SUBURBAN DESTINATION, PACE BUS
+							#     METRA RAIL - PACE BUS, ADDED FARE IS PACE FEEDER BUS FARE
+							approach_cost[s & (FM == TransitModeCode_METRA_RAIL), :, J] = FEEDER_BUS_BOARDING_FARE
+							#     CTA - METRA RAIL - PACE BUS,  NO ADDED FARE, LINKUP > FEEDER BUS
+							#     PACE - METRA RAIL - PACE BUS, ADDED FARE IS LINKUP LESS FEEDER BUS
+							approach_cost[s & (FM == TransitModeCode_PACE_BUS), :, J] = FEEDER_BUS_CBD_FARE
+						s = t & (LM == TransitModeCode_METRA_RAIL) & (dzone_type <= 2)
+						if np.any(s):
+							#     CHICAGO DESTINATION, CTA BUS
+							#     METRA - CTA BUS, ADDED COST IS LINKUP FARE (SINGLE RIDE)
+							approach_cost[s & (FM == TransitModeCode_METRA_RAIL), :, J] = CTA_CBD_LINK_UP_FARE
+							#     CTA - METRA - CTA BUS, ADDED COST IS CTA TRANSFER
+							approach_cost[s & (FM == TransitModeCode_CTA_RAIL), :, J] = CTA_FIRST_XFER_FARE
+							#     PACE - METRA - CTA BUS, ADDED COST IS LINKUP MINUS FEEDER BUS
+							approach_cost[s & (FM == TransitModeCode_PACE_BUS), :, J] = FEEDER_BUS_CBD_FARE
+						# ADD CTA TRANSFER IF NOT ALREADY PAID BUT IT WAS USED
+						s = t & (LM < TransitModeCode_CTA_RAIL) & (dzone_type > 2)
+						if np.any(s):
+							approach_cost[s, J] = CTA_FIRST_XFER_FARE * (
+									(best_approach_mode[:, FRONT_END]==APPROACH_BUS)
+									|(best_approach_mode[:, FRONT_END]==APPROACH_FEEDER_BUS)
+							)
 
-
-						# LAST MODE CTA RAPID TRANSIT
-						# NO ADDED FARE FOR EGRESS BUS, TRANSFER OR LINKUP ALREADY PURCHASED
-						elif (FM < 7):
-							TVAR4[:, J] = TVAR4[:, J] + approach_cost[:, J]
-
-						# ADD CTA TRANSFER IF NOT ALREADY PAID
-						else:
-							approach_cost[:, J] = CTA_FIRST_XFER_FARE * ((best_approach_mode[:, FRONT_END]==APPROACH_BUS)|(best_approach_mode[:, FRONT_END]==APPROACH_FEEDER_BUS))
-							TVAR4[:, J] = TVAR4[:, J] + approach_cost[:, J]
-						# # DESTINATION OTHER THAN CHICAGO, ADDED COST IS STILL CTA TRANSFER
-						# elif (dzone_type > 2):
-						# 	approach_cost[:, J] = CTA_FIRST_XFER_FARE
-						# 	TVAR4[:, J] = TVAR4[:, J] + approach_cost[:, J]
-						#
-						# # CHICAGO DESTINATION, ADDED COST IS CTA TRANSFER
-						# else:
-						# 	approach_cost[:, J] = CTA_FIRST_XFER_FARE
-						# 	TVAR4[:, J] = TVAR4[:, J] + approach_cost[:, J]
+						TVAR4[t, :, J] += approach_cost[t, :, J]
 
 
 				# = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
 				#    J=2(PARK & RIDE) FIRST MODE. PARK & RIDE FOR APPROACH TO RAPID TRANSIT AND SUBURBAN RAIL ROAD
 				# = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
 				elif (J == APPROACH_PARK_N_RIDE and I == FRONT_END):
-					approach_drivetime[:, J] = approach_distances[:, DIST_TO_PARK_N_RIDE_STATION, I] / SPEEDS[ZTYPE_Z - 1] * 60.
-					approach_walktime[:, J] = W2PNR
+					approach_drivetime[t,:, J] = approach_distances[t,:, DIST_TO_PARK_N_RIDE_STATION, I] / SPEEDS[ZTYPE_Z[t] - 1, np.newaxis] * 60.
+					approach_walktime[t,:, J] = W2PNR
 					#     APPROACH COST=PER MILE COST + FIXED COST
-					approach_cost[:, J] = approach_distances[:, DIST_TO_PARK_N_RIDE_STATION, I] * AUTO_OPERATING_COST_BY_ZONETYPE[ZTYPE_Z - 1]
+					approach_cost[t,:, J] = approach_distances[t,:, DIST_TO_PARK_N_RIDE_STATION, I] * AUTO_OPERATING_COST_BY_ZONETYPE[ZTYPE_Z[t] - 1,np.newaxis]
 					#     OPERATING COST MAY NOT BE LESS THAN 5 CENTS
-					approach_cost[:, J] = np.fmin(approach_cost[:, J], 5.0)
+					approach_cost[t,:, J] = np.fmin(approach_cost[t,:, J], 5.0)
 
-					approach_cost[:, J] = approach_cost[:, J] + AFC1
+					approach_cost[t,:, J] = approach_cost[t,:, J] + AFC1
 					#     ADD HALF OF THE PARKING COST IF PARK-&-RIDE AVAILABLE
-					if (PNRAVL[Z]):
-						approach_cost[:, J] = approach_cost[:, J] + PRCOST[Z] / 2
+					approach_cost[t&PNRAVL[Z],:, J] = approach_cost[t&PNRAVL[Z],:, J] + PRCOST[Z].values[t,np.newaxis] / 2
 					#     IF NO PARK-&-RIDE FACILITY AVAILABLE INCREASE WALK TIME
-					if (not PNRAVL[Z]):
-						approach_walktime[:, J] = 3 * W2PNR
+					approach_walktime[~(t&PNRAVL[Z]),:, J] = 3 * W2PNR
 
-					TVAR4[:, J] = approach_walktime[:, J] * DRVOT * 2.0 + approach_drivetime[:, J] * DRVOT
-					TVAR4[:, J] = TVAR4[:, J] + approach_cost[:, J]
+					TVAR4[t,:, J] = (
+						approach_walktime[t,:, J] * DRVOT * 2.0
+						+ approach_drivetime[t,:, J] * DRVOT
+						+ approach_cost[t,:, J]
+					)
 
 				# = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
 				#    J=3(KISS & RIDE) FIRST MODE. KISS & RIDE FOR APPROACH TO RAPID TRANSIT AND SUBURBAN RAIL ROAD
 				# = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
 				elif (J == APPROACH_KISS_N_RIDE and I == FRONT_END):
-					approach_drivetime[:, J] = approach_distances[:, DIST_TO_PARK_N_RIDE_STATION, I] / SPEEDS[ZTYPE_Z - 1] * 60.
-					approach_walktime[:, J] = W2PNR
-					approach_cost[:, J] = approach_distances[:, DIST_TO_PARK_N_RIDE_STATION, I] * AUTO_OPERATING_COST_BY_ZONETYPE[ZTYPE_Z - 1]
-					approach_cost[:, J] = np.fmin(approach_cost[:, J], 5.0)
+					approach_drivetime[t,:, J] = approach_distances[t,:, DIST_TO_PARK_N_RIDE_STATION, I] / SPEEDS[ZTYPE_Z[t] - 1, np.newaxis] * 60.
+					approach_walktime[t,:, J] = W2PNR
+					approach_cost[t,:, J] = approach_distances[t,:, DIST_TO_PARK_N_RIDE_STATION, I] * AUTO_OPERATING_COST_BY_ZONETYPE[ZTYPE_Z[t] - 1, np.newaxis]
+					approach_cost[t,:, J] = np.fmin(approach_cost[t,:, J], 5.0)
 					# *******************  RWE CHANGE FOR I290 AUGUST-SEPT 2009  ************
 					#     ASSUMPTION IS THAT KISS AND RIDE REQUIRES A SPECIAL
 					#     TRIP FROM HOME.  DRIVER AND PASSENGER TIME VALUES NOW EQUAL.
 					#      APCOST[J]=APCOST[J]*2.+AFC2+(DRVOT*approach_drivetime[J]*2.)/10
-					approach_cost[:, J] = approach_cost[:, J] * 2. + AFC2
-					TVAR4[:, J] = approach_walktime[:, J] * DRVOT * 2 + approach_drivetime[:, J] * 2.0 * DRVOT + approach_drivetime[:, J] * DRVOT
+					approach_cost[t,:, J] = approach_cost[t,:, J] * 2. + AFC2
+					TVAR4[t,:, J] = (
+							approach_walktime[t,:, J] * OVT_IVT_RATIO
+							+ approach_drivetime[t,:, J] * 2 # KISSING DRIVER
+							+ approach_drivetime[t,:, J]
+					) * DRVOT
 					# *******************  RWE CHANGE FOR I290 AUGUST-SEPT 2009  ************
-					TVAR4[:, J] = TVAR4[:, J] + approach_cost[:, J]
-				# = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
-				#    J=4(FEEDER BUS) FIRST MODE. FEEDER BUS FOR RAIL ONLY
-				# = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
-				elif (J == APPROACH_FEEDER_BUS and I == FRONT_END):
-					approach_walktime[:, J] = approach_distances[:, DIST_TO_FEEDER_BUS, I] / SPDWLK * 600.
-					approach_waittime[J] = fwfdr[Z]
-					approach_drivetime[:, J] = approach_distances[:, K, I] / SPEEDS[ZTYPE_Z-1 + 4] * 60.
-					# *******************  RWE CHANGE FOR I290 AUGUST-SEPT 2009  ************
-					TVAR4[:, J] = approach_walktime[:, J] * DRVOT * 2.0 + approach_drivetime[:, J] * DRVOT + approach_waittime[J] * DRVOT * 2.0
-					# *******************  RWE CHANGE FOR I290 AUGUST-SEPT 2009  ************
-					# ## SAME CODE BLOCK AS FOR BUS
-					#     FIRST MODE SUBURBAN RAIL - CHECK ZONE TYPE AT ORIGIN
-					if (M == 8):
-						if (ozone_type > 2):
-							#   --- SUBURBAN ORIGIN, PACE BUS ---
-							#     PACE BUS - METRA RAIL, ADDED FARE IS PACE FEEDER BUS FARE
-							if (LM == 8):
-								approach_cost[:, J] = FEEDER_BUS_BOARDING_FARE
-							#     PACE BUS - METRA RAIL - CTA, NO ADDED FARE, LINKUP > FEEDER BUS
-							if (LM == 7 or LM == 5 or LM == 4):
-								approach_cost[:, J] = 0
-							#     PACE BUS - METRA RAIL - PACE, ADDED FARE IS LINKUP LESS FEEDER BUS
-							if (LM == 6):
-								approach_cost[:, J] = FEEDER_BUS_CBD_FARE
-							#     ADD APPROACH TIMES AND COSTS - EVERYTHING SHOULD NOW BE IN CENTS
-							TVAR4[:, J] = TVAR4[:, J] + approach_cost[:, J]
-						else:
-							#   --- CHICAGO ORIGIN, CTA BUS ---
-							#     CTA BUS - METRA RAIL, ADDED FARE IS LINKUP FARE (SINGLE RIDE)
-							if (LM == 8):
-								approach_cost[:, J] = CTA_CBD_LINK_UP_FARE
-							#     CTA BUS - METRA RAIL - CTA, ADDED FARE IS CTA TRANSFER
-							if (LM == 7 or LM == 5 or LM == 4):
-								approach_cost[:, J] = CTA_FIRST_XFER_FARE
-							#     CTA BUS - METRA RAIL - PACE, ADDED FARE IS LINKUP LESS FEEDER BUS
-							if (LM == 6):
-								approach_cost[:, J] = FEEDER_BUS_CBD_FARE
-							#     ADD APPROACH TIMES AND COSTS - EVERYTHING SHOULD NOW BE IN CENTS
-							TVAR4[:, J] = TVAR4[:, J] + approach_cost[:, J]
-
-					#     FIRST MODE CTA RAPID TRANSIT
-					#     WHEN FOLLOWING STATEMENT IS TRUE A FULL FARE AND TRANSFER HAVE
-					#     BEEN PAID, SO NO ADDED FARE IS NEEDED FOR BUS
-					elif (LM < 7):
-						TVAR4[:, J] = TVAR4[:, J] + approach_cost[:, J]
-
-					#     ORIGIN OTHER THAN CHICAGO, ADDED FARE IS NOW AN RTA TRANSFER
-					elif (ozone_type > 2):
-						approach_cost[:, J] = PACE_BUS_FIRST_XFER_FARE
-						TVAR4[:, J] = TVAR4[:, J] + approach_cost[:, J]
-
-					#     CHICAGO ORIGIN, ADDED FARE IS CTA TRANSFER
-					else:
-						approach_cost[:, J] = CTA_FIRST_XFER_FARE
-						TVAR4[:, J] = TVAR4[:, J] + approach_cost[:, J]
-
-			#     END OF LOOP FOR FIVE APPROACH ALTERNATIVES
+					TVAR4[t,:, J] += approach_cost[t,:, J]
 
 		# = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
 		#     EVALUATE APPROACH MODES AND SELECT THE BEST
@@ -643,29 +681,37 @@ def transit_approach(
 			if (TPTYPE == NH and (J == APPROACH_PARK_N_RIDE or J == APPROACH_KISS_N_RIDE)):
 				continue
 			# --  FIND LOWEST COST APPROACH
-			low_cost = (TVAR4[:, J] < TVAR5) & (TVAR4[:, J] > 0)
+			low_cost = (TVAR4[:,:, J] < TVAR5) & (TVAR4[:,:, J] > 0)
 			TVAR5[low_cost] = TVAR4[low_cost, J]
 			best_approach_mode[low_cost, I] = J
 			best_drivetime[low_cost, I] = approach_drivetime[low_cost, J] + .5
 			best_walktime[low_cost, I] = approach_walktime[low_cost, J] + .5
 			best_cost[low_cost, I] = approach_cost[low_cost, J] + .5
-			best_waittime[low_cost, I] = approach_waittime[J] + .5
+			best_waittime[low_cost, I] = approach_waittime[low_cost,J] + .5
 			if trace:
 				log.log(trace, f" DIRECTION {I} APPROACH TYPE {J} {APPROACH_MODE_NAMES.get(J)}")
-				log.log(trace, f"  drivetime {approach_drivetime[:5, J]}")
-				log.log(trace, f"  walktime  {approach_walktime[:5, J]}")
-				log.log(trace, f"  cost      {approach_cost[:5, J]}")
-				log.log(trace, f"  waittime  {approach_waittime[J]}")
-				log.log(trace, f"  gen cost  {TVAR4[:5, J]}")
+				log.log(trace, f"  drivetime {approach_drivetime[:5,:5, J]}")
+				log.log(trace, f"  walktime  {approach_walktime[:5,:5, J]}")
+				log.log(trace, f"  cost      {approach_cost[:5,:5, J]}")
+				log.log(trace, f"  waittime  {approach_waittime[:5,:5,J]}")
+				log.log(trace, f"  gen cost  {TVAR4[:5,:5, J]}")
 		if trace:
-			log.log(trace, f" DIRECTION {I} BEST APPROACH TYPE {best_approach_mode[:5,I]}")
+			log.log(trace, f" DIRECTION {I} BEST APPROACH TYPE {best_approach_mode[:5,:5,I]}")
 
 
 	#     ADD ORIGIN AND DESTINATION QUANTITIES AND PASS BACK TO TRIPS
 
-	ae_drivetime = best_drivetime[:, 0] + best_drivetime[:, 1]
-	ae_walktime = best_walktime[:, 0] + best_walktime[:, 1]
-	ae_cost = best_cost[:, 0] + best_cost[:, 1]
-	ae_waittime = best_waittime[:, 0] + best_waittime[:, 1]
+	ae_drivetime = best_drivetime[:,:, 0] + best_drivetime[:,:, 1]
+	ae_walktime = best_walktime[:,:, 0] + best_walktime[:,:, 1]
+	ae_cost = best_cost[:,:, 0] + best_cost[:,:, 1]
+	ae_waittime = best_waittime[:,:, 0] + best_waittime[:,:, 1]
 
-	return ae_drivetime, ae_walktime, ae_cost, ae_waittime, best_approach_mode
+	if isinstance(ozone_, int):
+		ae_drivetime = ae_drivetime.squeeze(0)
+		ae_walktime = ae_walktime.squeeze(0)
+		ae_cost = ae_cost.squeeze(0)
+		ae_waittime = ae_waittime.squeeze(0)
+		best_approach_mode = best_approach_mode.squeeze(0)
+		approach_distances = approach_distances.squeeze(0)
+
+	return ae_drivetime, ae_walktime, ae_cost, ae_waittime, best_approach_mode, approach_distances

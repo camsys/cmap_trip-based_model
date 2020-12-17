@@ -25,9 +25,11 @@ def read_m023(filename):
 		m023.AUTO_OPERATING_COST_BY_SPEED = [int(j) for j in line[:8]]
 		line = f.readline().split()
 		m023.AUTO_OPERATING_COST_BY_SPEED.extend([int(j) for j in line[:8]])
+		m023.AUTO_OPERATING_COST_BY_SPEED = np.asarray(m023.AUTO_OPERATING_COST_BY_SPEED)
 
 		line = f.readline().split()
 		m023.AUTO_OPERATING_COST_BY_ZONETYPE = [int(j) for j in line[:4]]
+		m023.AUTO_OPERATING_COST_BY_ZONETYPE = np.asarray(m023.AUTO_OPERATING_COST_BY_ZONETYPE)
 
 	return m023
 
