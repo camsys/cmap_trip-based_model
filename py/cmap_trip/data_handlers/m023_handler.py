@@ -1,8 +1,6 @@
 import pandas as pd
 import numpy as np
 from addict import Dict
-from .filepaths import filenames
-
 
 def read_m023(filename):
 	m023 = Dict()
@@ -33,4 +31,9 @@ def read_m023(filename):
 
 	return m023
 
-m023 = read_m023(filenames.MCHW_M023)
+
+def load_m023(filenames):
+
+	m023 = read_m023(filenames.MCHW_M023)
+	return m023
+

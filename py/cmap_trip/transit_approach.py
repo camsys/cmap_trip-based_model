@@ -1,12 +1,9 @@
 import numpy as np
 import logging
+from addict import Dict
 log = logging.getLogger('CMAP')
 
-from .m023_handler import m023
-from .m01_handler import m01
-from .distr_handler import distr
 from .ae_distance_sim import simulate_ae_dist
-from .skims_handler import first_mode_peak, first_mode_offpeak, last_mode_peak, last_mode_offpeak
 from .random_states import check_random_state
 
 # trip types
@@ -66,15 +63,6 @@ DRVOT = 14
 OVT_IVT_RATIO = 2.0
 
 
-PACE_BUS_BOARDING_FARE = m023.PACE_BUS_BOARDING_FARE
-PACE_BUS_FIRST_XFER_FARE = m023.PACE_BUS_FIRST_XFER_FARE
-FEEDER_BUS_BOARDING_FARE = m023.FEEDER_BUS_BOARDING_FARE
-FEEDER_BUS_CBD_FARE = m023.FEEDER_BUS_CBD_FARE
-
-CTA_FIRST_XFER_FARE = m023.CTA_FIRST_XFER_FARE
-CTA_CBD_LINK_UP_FARE = m023.CTA_CBD_LINK_UP_FARE
-
-AUTO_OPERATING_COST_BY_ZONETYPE = m023.AUTO_OPERATING_COST_BY_ZONETYPE  # AVERAGE OPERATING COST PER MILE FOR AUTO, BY ZONE TYPE
 
 AFC1 = 35  # AUTO FIXED COSTS FOR AUTO DRIVER IN CENTS
 AFC2 = 20  # AUTO FIXED COSTS FOR AUTO PASSENGER IN CENTS
@@ -85,6 +73,7 @@ W2PNR = 2
 
 
 def _simulate_approach_distances(
+		dh,
 		zone,
 		attached_mode,
 		trip_purpose,
@@ -96,6 +85,7 @@ def _simulate_approach_distances(
 
 	Parameters
 	----------
+	dh : DataHandler
 	zone : int
 		Zone id (1-based)
 	attached_mode : int
@@ -112,6 +102,7 @@ def _simulate_approach_distances(
 	"""
 	if not isinstance(zone, int):
 		return _simulate_approach_distances_arr(
+			dh,
 			zone,
 			attached_mode,
 			trip_purpose,
@@ -121,6 +112,7 @@ def _simulate_approach_distances(
 		)
 	random_state = check_random_state(random_state)
 	replication = list(out.shape[:-1])
+	distr = dh.distr
 	if replication[0] == 1:
 		replication = replication[1:]
 	for J in range(N_DIST_TO_TYPES):
@@ -160,6 +152,7 @@ def _simulate_approach_distances(
 
 
 def _simulate_approach_distances_arr(
+		dh,
 		zone,
 		attached_mode,
 		trip_purpose,
@@ -187,7 +180,7 @@ def _simulate_approach_distances_arr(
 	"""
 	random_state = check_random_state(random_state)
 	replication = list(out.shape[1:-1])
-	distr_df = distr[trip_purpose].unstack().loc[zone]
+	distr_df = dh.distr[trip_purpose].unstack().loc[zone]
 	for J in range(N_DIST_TO_TYPES):
 		# OBTAIN APPROACH DISTANCES TO FIVE MODES
 		if (J == DIST_TO_BUS):
@@ -265,6 +258,7 @@ def _IS_CTA(m):
 	)
 
 def transit_approach(
+		dh,
 		ozone,
 		dzone,
 		TPTYPE,
@@ -278,6 +272,7 @@ def transit_approach(
 
 	Parameters
 	----------
+	dh : DataHandler
 	ozone, dzone : int or array-like
 		Zone ID numbers.  If array-like, should be arrays of the same shape.
 	TPTYPE : {'HW', 'HO', 'NH'}
@@ -287,17 +282,19 @@ def transit_approach(
 
 	Returns
 	-------
-	ae_drivetime : array of int32, shape [replication]
-		simulated in vehicle (drive) approach times, in minutes
-	ae_walktime : array of int32, shape [replication]
-		simulated out of vehicle (walk) approach times, in minutes
-	ae_cost : array of int32, shape [replication]
-		simulated approach costs, in cents
-	ae_waittime : array of int32, shape [replication]
-		simulated approach waiting times
-	best_approach_mode : array of int8, shape [replication, 2]
-		simulated best approach modes
-	approach_distances : array of float32, shape [replication, N_DIST_TO_TYPES, N_TRIP_ENDS]
+	Dict
+		Containing:
+		- drivetime : array of int32, shape [replication]
+			simulated in vehicle (drive) approach times, in minutes
+		- walktime : array of int32, shape [replication]
+			simulated out of vehicle (walk) approach times, in minutes
+		- cost : array of int32, shape [replication]
+			simulated approach costs, in cents
+		- waittime : array of int32, shape [replication]
+			simulated approach waiting times
+		- approach_mode : array of int8, shape [replication, 2]
+			simulated best approach modes
+		= approach_distances : array of float32, shape [replication, N_DIST_TO_TYPES, N_TRIP_ENDS]
 
 	Notes
 	-----
@@ -306,6 +303,16 @@ def transit_approach(
 
 	"""
 	random_state = check_random_state(random_state or ozone+dzone)
+
+	PACE_BUS_BOARDING_FARE = dh.m023.PACE_BUS_BOARDING_FARE
+	PACE_BUS_FIRST_XFER_FARE = dh.m023.PACE_BUS_FIRST_XFER_FARE
+	FEEDER_BUS_BOARDING_FARE = dh.m023.FEEDER_BUS_BOARDING_FARE
+	FEEDER_BUS_CBD_FARE = dh.m023.FEEDER_BUS_CBD_FARE
+
+	CTA_FIRST_XFER_FARE = dh.m023.CTA_FIRST_XFER_FARE
+	CTA_CBD_LINK_UP_FARE = dh.m023.CTA_CBD_LINK_UP_FARE
+
+	AUTO_OPERATING_COST_BY_ZONETYPE = dh.m023.AUTO_OPERATING_COST_BY_ZONETYPE  # AVERAGE OPERATING COST PER MILE FOR AUTO, BY ZONE TYPE
 
 	if replication is None:
 		replication = ITER
@@ -330,7 +337,7 @@ def transit_approach(
 	ozone_idx = ozone-1
 	dzone_idx = dzone-1
 
-	m01_df = m01.HW
+	m01_df = dh.m01
 	ZTYPE = m01_df['zone_type'] # integers 1-4
 	if TPTYPE == HW:
 		fwbus = m01_df['first_wait_bus_peak'] # FIRST WAIT FOR BUS IN APPROACH SUBMODEL
@@ -348,11 +355,11 @@ def transit_approach(
 	approach_walktime = np.zeros([vector_len, replication, N_APPROACH_MODES], dtype=np.float32)
 	TVAR4 = np.zeros([vector_len, replication, 5], dtype=np.float32)
 
-	best_approach_mode = np.zeros([vector_len, replication, N_TRIP_ENDS], dtype=np.int8)
-	best_cost = np.zeros([vector_len, replication, N_TRIP_ENDS], dtype=np.int32)
-	best_waittime = np.zeros([vector_len, replication, N_TRIP_ENDS], dtype=np.int32)
-	best_walktime = np.zeros([vector_len, replication, N_TRIP_ENDS], dtype=np.int32)
-	best_drivetime = np.zeros([vector_len, replication, N_TRIP_ENDS], dtype=np.int32)
+	best_approach_mode = np.zeros([vector_len*replication, N_TRIP_ENDS], dtype=np.int8)
+	best_cost = np.zeros([vector_len*replication, N_TRIP_ENDS], dtype=np.int32)
+	best_waittime = np.zeros([vector_len*replication, N_TRIP_ENDS], dtype=np.int32)
+	best_walktime = np.zeros([vector_len* replication, N_TRIP_ENDS], dtype=np.int32)
+	best_drivetime = np.zeros([vector_len* replication, N_TRIP_ENDS], dtype=np.int32)
 	#
 	#     GET ZONE TYPES
 	#
@@ -363,11 +370,11 @@ def transit_approach(
 	#     FM=FIRST MODE,LM=LAST MODE,PM=PRIORITY MODE
 	#
 	if TPTYPE == 'HW':
-		FM = first_mode_peak[ozone_idx, dzone_idx]
-		LM = last_mode_peak[ozone_idx, dzone_idx]
+		FM = dh.skims.first_mode_peak[ozone_idx, dzone_idx]
+		LM = dh.skims.last_mode_peak[ozone_idx, dzone_idx]
 	else:
-		FM = first_mode_offpeak[ozone_idx, dzone_idx]
-		LM = last_mode_offpeak[ozone_idx, dzone_idx]
+		FM = dh.skims.first_mode_offpeak[ozone_idx, dzone_idx]
+		LM = dh.skims.last_mode_offpeak[ozone_idx, dzone_idx]
 	#
 	#     INET TRANSIT NETWORK STORES SOME SUBURBAN BUS LINES (MODE=6)
 	#     AS MODE=5 DUE TO ARRAY SIZE LIMITS.  IF MODE=5 AND
@@ -377,41 +384,35 @@ def transit_approach(
 	FM[(FM == 5) & (ozone_type > 2)] = 6
 	LM[(LM == 5) & (ozone_type > 2)] = 6
 
-	# if (FM == 5 and ozone_type > 2):
-	# 	FM = 6
-	# if (LM == 5 and dzone_type > 2):
-	# 	LM = 6
-
 	#
 	#     GET APPROACH DISTANCES FOR FIRST AND LAST MODES
 	#
 
 	####      CALL ADIST(ozone,dzone,FM,LM)
 	if approach_distances is not None:
-		assert approach_distances.shape == [vector_len, replication, N_DIST_TO_TYPES, N_TRIP_ENDS]
+		if replication == 1 and len(approach_distances.shape) == 3:
+			approach_distances = np.expand_dims(approach_distances, axis=1)
+		assert approach_distances.shape == (vector_len, replication, N_DIST_TO_TYPES, N_TRIP_ENDS)
 	else:
 		approach_distances = np.empty([vector_len, replication, N_DIST_TO_TYPES, N_TRIP_ENDS])
-
-		for purpose in ['HW','HO','NH']:
-			this_purpose = (TPTYPE == purpose)
-			#z = np.empty([sum(this_purpose), replication, N_DIST_TO_TYPES, N_TRIP_ENDS])
-			_simulate_approach_distances(
-				ozone_,
-				attached_mode=FM,
-				trip_purpose=purpose,
-				trip_end=0,
-				out=approach_distances[:,:,:,0],
-				random_state=random_state,
-			)
-			_simulate_approach_distances(
-				dzone_,
-				attached_mode=LM,
-				trip_purpose=purpose,
-				trip_end=1,
-				out=approach_distances[:,:,:,1],
-				random_state=random_state,
-			)
-			# approach_distances[this_purpose,...] = z
+		_simulate_approach_distances(
+			dh,
+			ozone_,
+			attached_mode=FM,
+			trip_purpose=TPTYPE,
+			trip_end=0,
+			out=approach_distances[:,:,:,0],
+			random_state=random_state,
+		)
+		_simulate_approach_distances(
+			dh,
+			dzone_,
+			attached_mode=LM,
+			trip_purpose=TPTYPE,
+			trip_end=1,
+			out=approach_distances[:,:,:,1],
+			random_state=random_state,
+		)
 	if trace:
 		log.log(trace, f" PRODUCTION APPROACH DISTANCES")
 		log.log(trace, f"  to Bus    {approach_distances[:5,:5,DIST_TO_BUS,0]}")
@@ -445,7 +446,7 @@ def transit_approach(
 			Z = dzone
 			M = LM
 
-		ZTYPE_Z = ZTYPE.iloc[Z].values
+		ZTYPE_Z = ZTYPE[Z].values
 
 		#
 		#  IN THIS CASE WE ARE MAKING THE STATION PARKING COST FOR HOME BASED OTHER AND
@@ -459,7 +460,7 @@ def transit_approach(
 		#
 		# *******************  RWE CHANGE FOR I290 AUGUST-SEPT 2009  ************
 		#     SET HIGH STARTING VALUE OF TVAR5
-		TVAR5 = np.full([vector_len,replication], 1.E10)
+		TVAR5 = np.full([vector_len*replication], 1.E10)
 		# *******************  RWE CHANGE FOR I290 AUGUST-SEPT 2009  ************
 		#     IN CALCULATING TVAR4 AND TVAR5
 		#       IN-VEHICLE TIME = DRVOT = 20 CENTS/MIN
@@ -481,12 +482,12 @@ def transit_approach(
 			# if (ZTYPE_Z == 1 and TPTYPE == HW):
 			# 	approach_walktime[:, 0] = approach_walktime[:, 0] * 1.20
 			TVAR4[t,:, J] = approach_walktime[t,:, 0] * DRVOT * 2.0
-			TVAR5[t,:] = TVAR4[t,:, J]
-			best_approach_mode[t,:, I] = 0
-			best_drivetime[t,:, I] = 0
-			best_walktime[t,:, I] = approach_walktime[t,:, 0] + .5
-			best_cost[t,:, I] = 0
-			best_waittime[t,:, I] = 0
+			TVAR5.reshape([vector_len,replication])[t,:] = TVAR4[t,:, J]
+			best_approach_mode.reshape([vector_len,replication,N_TRIP_ENDS])[t,:, I] = 0
+			best_drivetime.reshape([vector_len,replication,N_TRIP_ENDS])[t,:, I] = 0
+			best_walktime.reshape([vector_len,replication,N_TRIP_ENDS])[t,:, I] = approach_walktime[t,:, 0] + .5
+			best_cost.reshape([vector_len,replication,N_TRIP_ENDS])[t,:, I] = 0
+			best_waittime.reshape([vector_len,replication,N_TRIP_ENDS])[t,:, I] = 0
 			for J in [APPROACH_BUS, APPROACH_PARK_N_RIDE, APPROACH_KISS_N_RIDE, APPROACH_FEEDER_BUS]:
 				TVAR4[t,:, J] = 0.
 				approach_cost[t, :, J] = 0.
@@ -630,9 +631,10 @@ def transit_approach(
 
 					approach_cost[t,:, J] = approach_cost[t,:, J] + AFC1
 					#     ADD HALF OF THE PARKING COST IF PARK-&-RIDE AVAILABLE
-					approach_cost[t&PNRAVL[Z],:, J] = approach_cost[t&PNRAVL[Z],:, J] + PRCOST[Z].values[t,np.newaxis] / 2
+					_tz = t&PNRAVL[Z]
+					approach_cost[_tz,:, J] += PRCOST[Z].values[_tz,np.newaxis] / 2
 					#     IF NO PARK-&-RIDE FACILITY AVAILABLE INCREASE WALK TIME
-					approach_walktime[~(t&PNRAVL[Z]),:, J] = 3 * W2PNR
+					approach_walktime[~_tz,:, J] = 3 * W2PNR
 
 					TVAR4[t,:, J] = (
 						approach_walktime[t,:, J] * DRVOT * 2.0
@@ -681,13 +683,14 @@ def transit_approach(
 			if (TPTYPE == NH and (J == APPROACH_PARK_N_RIDE or J == APPROACH_KISS_N_RIDE)):
 				continue
 			# --  FIND LOWEST COST APPROACH
-			low_cost = (TVAR4[:,:, J] < TVAR5) & (TVAR4[:,:, J] > 0)
-			TVAR5[low_cost] = TVAR4[low_cost, J]
+			TVAR4_J = TVAR4[:,:, J].reshape(-1)
+			low_cost = (TVAR4_J < TVAR5) & (TVAR4_J > 0)
+			TVAR5[low_cost] = TVAR4_J[low_cost]
 			best_approach_mode[low_cost, I] = J
-			best_drivetime[low_cost, I] = approach_drivetime[low_cost, J] + .5
-			best_walktime[low_cost, I] = approach_walktime[low_cost, J] + .5
-			best_cost[low_cost, I] = approach_cost[low_cost, J] + .5
-			best_waittime[low_cost, I] = approach_waittime[low_cost,J] + .5
+			best_drivetime[low_cost, I] = approach_drivetime.reshape([-1,N_APPROACH_MODES])[low_cost, J] + .5
+			best_walktime[low_cost, I] = approach_walktime.reshape([-1,N_APPROACH_MODES])[low_cost, J] + .5
+			best_cost[low_cost, I] = approach_cost.reshape([-1,N_APPROACH_MODES])[low_cost, J] + .5
+			best_waittime[low_cost, I] = approach_waittime.reshape([-1,N_APPROACH_MODES])[low_cost,J] + .5
 			if trace:
 				log.log(trace, f" DIRECTION {I} APPROACH TYPE {J} {APPROACH_MODE_NAMES.get(J)}")
 				log.log(trace, f"  drivetime {approach_drivetime[:5,:5, J]}")
@@ -696,22 +699,30 @@ def transit_approach(
 				log.log(trace, f"  waittime  {approach_waittime[:5,:5,J]}")
 				log.log(trace, f"  gen cost  {TVAR4[:5,:5, J]}")
 		if trace:
-			log.log(trace, f" DIRECTION {I} BEST APPROACH TYPE {best_approach_mode[:5,:5,I]}")
+			log.log(trace, f" DIRECTION {I} BEST APPROACH TYPE {best_approach_mode[:5,I]}")
 
 
 	#     ADD ORIGIN AND DESTINATION QUANTITIES AND PASS BACK TO TRIPS
 
-	ae_drivetime = best_drivetime[:,:, 0] + best_drivetime[:,:, 1]
-	ae_walktime = best_walktime[:,:, 0] + best_walktime[:,:, 1]
-	ae_cost = best_cost[:,:, 0] + best_cost[:,:, 1]
-	ae_waittime = best_waittime[:,:, 0] + best_waittime[:,:, 1]
+	ae_drivetime = best_drivetime[:, 0] + best_drivetime[:, 1]
+	ae_walktime = best_walktime[:, 0] + best_walktime[:, 1]
+	ae_cost = best_cost[:, 0] + best_cost[:, 1]
+	ae_waittime = best_waittime[:, 0] + best_waittime[:, 1]
 
-	if isinstance(ozone_, int):
-		ae_drivetime = ae_drivetime.squeeze(0)
-		ae_walktime = ae_walktime.squeeze(0)
-		ae_cost = ae_cost.squeeze(0)
-		ae_waittime = ae_waittime.squeeze(0)
-		best_approach_mode = best_approach_mode.squeeze(0)
-		approach_distances = approach_distances.squeeze(0)
+	if not isinstance(ozone_, int):
+		ae_drivetime = ae_drivetime.reshape([vector_len,replication])
+		ae_walktime = ae_walktime.reshape([vector_len,replication])
+		ae_cost = ae_cost.reshape([vector_len,replication])
+		ae_waittime = ae_waittime.reshape([vector_len,replication])
+		best_approach_mode = best_approach_mode.reshape([vector_len,replication,N_TRIP_ENDS])
+		approach_distances = approach_distances.reshape([vector_len, replication, N_DIST_TO_TYPES, N_TRIP_ENDS])
 
-	return ae_drivetime, ae_walktime, ae_cost, ae_waittime, best_approach_mode, approach_distances
+	out = Dict()
+	out.drivetime = ae_drivetime
+	out.walktime = ae_walktime
+	out.cost = ae_cost
+	out.waittime = ae_waittime
+	out.approach_mode = best_approach_mode
+	out.approach_distances = approach_distances
+	return out
+

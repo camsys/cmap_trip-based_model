@@ -16,7 +16,7 @@ def check_random_state(seed):
     if seed is None or seed is np.random:
         return np.random.RandomState()
     if isinstance(seed, numbers.Integral):
-        return np.random.RandomState(seed)
+        return np.random.RandomState(seed % 1<<32)
     if isinstance(seed, np.random.RandomState):
         return seed
     raise ValueError('%r cannot be used to seed a numpy.random.RandomState'

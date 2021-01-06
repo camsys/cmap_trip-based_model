@@ -2,9 +2,6 @@ import logging
 log = logging.getLogger('CMAP')
 import pandas as pd
 from addict import Dict
-from .filepaths import filenames
-
-distr = Dict()
 
 def read_distr(filename):
 	raw = pd.read_csv(filename, header=None, index_col=0)
@@ -19,6 +16,10 @@ def read_distr(filename):
 	result = raw.stack('submode')
 	return result
 
-distr.HW = read_distr(filenames.PDHW_DISTR)
-distr.HO = read_distr(filenames.PDHO_DISTR)
-distr.NH = read_distr(filenames.PDNH_DISTR)
+def load_distr(filenames):
+	distr = Dict()
+	distr.HW = read_distr(filenames.PDHW_DISTR)
+	distr.HO = read_distr(filenames.PDHO_DISTR)
+	distr.NH = read_distr(filenames.PDNH_DISTR)
+	return distr
+
