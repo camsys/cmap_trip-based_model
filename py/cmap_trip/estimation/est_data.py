@@ -6,7 +6,7 @@ from .est_config import EstimationDir
 
 L("###### Set Directories and Prep Data ######")
 
-from cmap_trip.data_handlers import DataHandler
+from ..data_handlers import DataHandler
 
 
 dh = DataHandler(

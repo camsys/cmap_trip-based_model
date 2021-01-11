@@ -45,6 +45,9 @@ dependencies:
 - shortuuid
 - larch
 - tmip::emat
+- pyarrow
+- geopandas
+
 
 # After setting up and activating this environment, register with jupyter-notebook::
 #   python -m ipykernel install --user --name CMAP-TRIP --display-name "CMAP-TRIP"
