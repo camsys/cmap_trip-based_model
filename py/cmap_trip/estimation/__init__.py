@@ -6,7 +6,6 @@ import numpy as np
 import cmap_trip
 from addict import Dict
 from pathlib import Path
-import mapped
 
 from ..util import resource_usage, start_memory_tracing, ping_memory_tracing
 

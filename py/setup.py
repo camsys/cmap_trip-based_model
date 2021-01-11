@@ -51,11 +51,6 @@ setup(
     # requirements files see:
     # https://packaging.python.org/en/latest/requirements.html
 
-    install_requires=[
-        'addict>=2.2',
-        'numpy',
-        'scipy',
-        'pandas',
-    ],
+    install_requires=install_requires,
 
 )
