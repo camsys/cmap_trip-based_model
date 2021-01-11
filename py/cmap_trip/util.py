@@ -1,7 +1,10 @@
 import os
 import gc as _gc
 import timeit
-import resource
+try:
+	import resource
+except ModuleNotFoundError:
+	resource = None
 import time
 import numpy as np
 import pyarrow as pa
@@ -43,9 +46,13 @@ class MemoryUsage:
 		if gc:
 			_gc.collect()
 		now_memory = psutil.Process(self.pid).memory_info().rss
-		max_memory = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+		if resource:
+			max_memory = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+			marginal_max = max_memory - self.max_memory_history[-1]
+		else:
+			max_memory = None
+			marginal_max = None
 		marginal_usage = now_memory - self.memory_history[-1]
-		marginal_max = max_memory - self.max_memory_history[-1]
 		if time_checkpoint:
 			time_note = si_units(time.time()-time_checkpoint, kind='s') + ": "
 		else:
