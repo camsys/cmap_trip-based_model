@@ -136,13 +136,15 @@ class FileNames:
 			return self._emme_database_dir / f"cmap_trip_config.yaml"
 		if item == "choice_model_param_file":
 			return self.cache_dir / f"choice_model_params.yaml"
-		if item == 'tripgen_sas':
-			return latest_matching(
-				self.emme_database_dir / "tg*.sas7bdat"
-			) or latest_matching(
-				self.cache_dir / "tg*.sas7bdat"
-			)
 		raise AttributeError(item)
+
+	@property
+	def tripgen_sas(self):
+		return latest_matching(
+			self.emme_database_dir / "tg*.sas7bdat"
+		) or latest_matching(
+			self.cache_dir / "tg*.sas7bdat"
+		)
 
 	def save(self, name, data):
 		try:

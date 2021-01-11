@@ -26,8 +26,8 @@ SURVEY_DATA_DIR = "../HTS/preproc"
 AE_DATA_DIR = "../HTS/cmap-proc"
 TRIPS_CACHE_FILE = "trips_with_ae_v10"
 
-hh = pd.read_csv(pj(SURVEY_DATA_DIR,'household.csv'))
-ae = pd.read_csv(pj(AE_DATA_DIR,'access_egress.csv'))
+hh = pd.read_csv(dh.SURVEY_DATA_DIR / 'household.csv')
+ae = pd.read_csv(dh.AE_DATA_DIR / 'access_egress.csv')
 
 core_cbd_zones = [
 	1, 2, 3, 4, 5, 6,
@@ -43,7 +43,7 @@ core_cbd_zones = [
 trips = dh.filenames.load(TRIPS_CACHE_FILE)
 if trips is None:
 
-	trips = pd.read_csv(pj(SURVEY_DATA_DIR,'trips.csv'))
+	trips = pd.read_csv(dh.SURVEY_DATA_DIR,'trips.csv')
 
 	# Convert trips to 3 modes only (auto, transit, tnc), and drop all other trips
 	trips['mode3'] = trips['mode'].map(mode_modeled).astype('category')

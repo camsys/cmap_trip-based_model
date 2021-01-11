@@ -17,5 +17,7 @@ dh = DataHandler(
 	emmemat_archive=EstimationDir/"SkimsForEstimation/emmemat.zip",
 )
 
+dh.SURVEY_DATA_DIR = EstimationDir/"../HTS/preproc"
+dh.AE_DATA_DIR = EstimationDir/"../HTS/cmap-proc"
 
 L("Data Handlers Ready")
