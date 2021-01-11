@@ -11,6 +11,8 @@ except ImportError:
 	GeoDataFrame = ()
 
 from .filepaths import FileNames, PathAttr
+from logging import getLogger
+log = getLogger("CMAP")
 
 class DataHandler:
 
@@ -18,39 +20,51 @@ class DataHandler:
 
 	def __init__(self, filenames=None, serial_dir=None, **kwargs):
 
+		log.debug("load filenames")
 		if filenames is None:
 			filenames = FileNames(**kwargs)
 
 		if serial_dir is None:
+			log.debug("create serial temp dir")
 			self._temporary_dir = tempfile.TemporaryDirectory()
 			serial_dir = self._temporary_dir.name
+
+		log.debug("basic init")
 		self.serial_dir = serial_dir
 		self.artifacts = {}
 		self._cache = {}
 
+		log.debug("filenames init")
 		self.filenames = filenames
 
+		log.debug("load distr")
 		from .distr_handler import load_distr
 		self['distr'] = load_distr(filenames)
 
+		log.debug("load m01")
 		from .m01_handler import load_m01
 		self['m01'] = load_m01(filenames)
 
+		log.debug("load m023")
 		from .m023_handler import load_m023
 		self['m023'] = load_m023(filenames)
 
+		log.debug("load shp")
 		from .shp_handler import load_zone_shapes
 		self['zone_shp'] = load_zone_shapes(filenames)
 
+		log.debug("load skims")
 		from .skims_handler import load_skims
 		self['skims'] = load_skims(filenames)
 
+		log.debug("load tg")
 		from .tg_handler import load_tg
 		tg = load_tg(filenames)
 		self['trip_attractions'] = tg.trip_attractions
 		self['trip_productions'] = tg.trip_productions
 		self['zone_productions'] = tg.zone_productions
 
+		log.debug("load parking")
 		from .parking_handler import load_cbd_parking
 		parking = load_cbd_parking(filenames)
 		self['cbd_parking_prices'] = parking.cbd_parking_prices

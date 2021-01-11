@@ -5,7 +5,7 @@
       <sourceFolder url="file://$MODULE_DIR$/py" isTestSource="false" />
       <excludeFolder url="file://$MODULE_DIR$/py/cmap_trip.egg-info" />
     </content>
-    <orderEntry type="jdk" jdkName="Python 3.8 (garage38) (2)" jdkType="Python SDK" />
+    <orderEntry type="jdk" jdkName="Python 3.8 (CMAP-TRIP)" jdkType="Python SDK" />
     <orderEntry type="sourceFolder" forTests="false" />
   </component>
   <component name="PackageRequirementsSettings">

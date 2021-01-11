@@ -7,6 +7,9 @@ import numpy as np
 import yaml
 from addict import Dict
 
+import logging
+log = logging.getLogger('CMAP')
+
 _here = os.path.abspath(os.path.dirname(__file__))
 emme_database_dir = os.path.normpath(os.path.join(_here, "../tests/data"))
 
@@ -37,9 +40,11 @@ class PathAttr:
 		else:
 			if prior != value:
 				self.on_change(obj, value)
+		log.debug(f"setattr {self.private_name} = {value}")
 		setattr(obj, self.private_name, value)
 
 	def on_change(self, obj, new_value):
+		log.debug(f"on_change {self.public_name}")
 		if self.change_callback:
 			self.change_callback(obj, new_value)
 
