@@ -4,16 +4,13 @@ import numpy as np
 import cmap_trip
 import os
 
-cmap_trip.set_skims_dir(
-	os.path.expanduser(
-		"~/Cambridge Systematics/PROJ CMAP Trip-Based - General/Estimation/SkimsForEstimation"
-	)
-)
+
 
 
 def test_transit_approach():
 	from cmap_trip.transit_approach import transit_approach
-	ae_drivetime, ae_walktime, ae_cost, ae_waittime, best_approach_mode, appr_dist = transit_approach(
+	out = transit_approach(
+		dh,
 		ozone=123,
 		dzone=456,
 		TPTYPE='HW',
@@ -22,16 +19,17 @@ def test_transit_approach():
 		trace=False,
 		random_state=789,
 	)
-	np.testing.assert_array_equal( ae_drivetime, [11, 11, 10,  7, 11,  8,  6,  7,  8,  7])
-	np.testing.assert_array_equal( ae_walktime, [ 5, 6,  6, 10,  5, 12, 14, 17, 12, 15])
-	np.testing.assert_array_equal( ae_cost, [115, 115, 115, 115, 115, 115, 115, 115, 115, 115])
-	np.testing.assert_array_equal( ae_waittime, [10, 10, 10,  0, 10,  0,  0,  0,  0,  0])
-	np.testing.assert_array_equal( best_approach_mode, np.asarray([
+	np.testing.assert_array_equal( out.drivetime, [11, 11, 10,  7, 11,  8,  6,  7,  8,  7])
+	np.testing.assert_array_equal( out.walktime, [ 5, 6,  6, 10,  5, 12, 14, 17, 12, 15])
+	np.testing.assert_array_equal( out.cost, [115, 115, 115, 115, 115, 115, 115, 115, 115, 115])
+	np.testing.assert_array_equal( out.waittime, [10, 10, 10,  0, 10,  0,  0,  0,  0,  0])
+	np.testing.assert_array_equal( out.approach_mode, np.asarray([
 		[2, 1], [2, 1], [2, 1], [2, 0], [2, 1], [2, 0], [2, 0], [2, 0], [2, 0], [2, 0],
 	]))
 
 
-	ae_drivetime, ae_walktime, ae_cost, ae_waittime, best_approach_mode, appr_dist = transit_approach(
+	out = transit_approach(
+		dh,
 		ozone=123,
 		dzone=12,
 		TPTYPE='HW',
@@ -40,15 +38,16 @@ def test_transit_approach():
 		trace=False,
 		random_state=789,
 	)
-	np.testing.assert_array_equal( ae_drivetime, [15, 15,  5,  7,  6,  8,  6,  7,  8,  7])
-	np.testing.assert_array_equal( ae_walktime, [ 5,  5, 20,  9, 18, 11, 13, 17, 11, 14])
-	np.testing.assert_array_equal( ae_cost, [140, 140, 115, 115, 115, 115, 115, 115, 115, 115])
-	np.testing.assert_array_equal( ae_waittime, [9, 9, 0, 0, 0, 0, 0, 0, 0, 0])
-	np.testing.assert_array_equal( best_approach_mode, np.asarray([
+	np.testing.assert_array_equal( out.drivetime, [15, 15,  5,  7,  6,  8,  6,  7,  8,  7])
+	np.testing.assert_array_equal( out.walktime, [ 5,  5, 20,  9, 18, 11, 13, 17, 11, 14])
+	np.testing.assert_array_equal( out.cost, [140, 140, 115, 115, 115, 115, 115, 115, 115, 115])
+	np.testing.assert_array_equal( out.waittime, [9, 9, 0, 0, 0, 0, 0, 0, 0, 0])
+	np.testing.assert_array_equal( out.approach_mode, np.asarray([
 		[2, 1], [2, 1], [2, 0], [2, 0], [2, 0], [2, 0], [2, 0], [2, 0], [2, 0], [2, 0],
 	]))
 
-	ae_drivetime, ae_walktime, ae_cost, ae_waittime, best_approach_mode, appr_dist = transit_approach(
+	out = transit_approach(
+		dh,
 		ozone=1,
 		dzone=12,
 		TPTYPE='HW',
@@ -57,16 +56,17 @@ def test_transit_approach():
 		trace=False,
 		random_state=789,
 	)
-	assert ae_drivetime == approx([15, 16, 14, 17, 16, 19, 15, 17, 18, 17])
-	assert ae_walktime == approx([19, 20, 20,  9, 18, 11, 13, 17, 11, 14])
-	assert ae_cost == approx([40, 40, 40, 40, 40, 40, 40, 40, 40, 40])
-	assert ae_waittime == approx([0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
-	assert best_approach_mode == approx(np.asarray([
+	assert out.drivetime == approx([15, 16, 14, 17, 16, 19, 15, 17, 18, 17])
+	assert out.walktime == approx([19, 20, 20,  9, 18, 11, 13, 17, 11, 14])
+	assert out.cost == approx([40, 40, 40, 40, 40, 40, 40, 40, 40, 40])
+	assert out.waittime == approx([0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
+	assert out.approach_mode == approx(np.asarray([
 		[2, 0], [2, 0], [2, 0], [2, 0], [2, 0], [2, 0], [2, 0], [2, 0], [2, 0], [2, 0],
 	]))
 
 
-	ae_drivetime, ae_walktime, ae_cost, ae_waittime, best_approach_mode, approach_dist = transit_approach(
+	out = transit_approach(
+		dh,
 		ozone=[
 			844,  844,  844,  863,  955,  955,  817,  817,  844,    7,    7,
 			330,  330,   33,   33,  644, 1482,  652,  652,  644,  644, 1482,
@@ -86,7 +86,7 @@ def test_transit_approach():
 		random_state=789,
 	)
 
-	np.testing.assert_array_equal(ae_drivetime, np.asarray([
+	np.testing.assert_array_equal(out.drivetime, np.asarray([
 		[ 0,  0,  0,  0,  0,  0,  0,  0,  0,  0],
 		[ 0,  0,  0,  0,  0,  0,  0,  0,  0,  0],
 		[ 0,  0,  0,  0,  0,  0,  0,  0,  0,  0],
@@ -138,7 +138,7 @@ def test_transit_approach():
 		[ 0,  1,  1,  0,  0,  2,  0,  3,  2,  3],
 		[ 0,  0,  0,  0,  0,  0,  0,  0,  0,  0],
 	], dtype=np.int32))
-	np.testing.assert_array_equal(ae_walktime, np.asarray([
+	np.testing.assert_array_equal(out.walktime, np.asarray([
 		[14, 21, 15, 17, 17, 15, 13, 15, 15, 19],
 		[18, 13, 15, 20, 21, 19, 13, 15, 13, 20],
 		[23, 10, 33, 26, 22, 26, 25, 17, 24, 19],

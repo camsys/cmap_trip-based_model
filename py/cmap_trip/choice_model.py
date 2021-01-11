@@ -105,13 +105,25 @@ def model_builder(
 				+ P("ovtt") * X(f"transit_approach_waittime")
 		) + utility_destination
 
-		m.graph.new_node(
-			parameter="Mu",
+		hired_car = m.graph.new_node(
+			parameter="Mu-HiredCar",
 			children=[
-				mode5codes.AUTO,
 				mode5codes.TNC1,
 				mode5codes.TNC2,
 				mode5codes.TAXI,
+			],
+			name="hiredcar-actualdest",
+		)
+
+		## IMPORTANT be sure to change `nests_per_dest` elswwhere (including estimtaion code)
+		#            if/when the number of nests per destination is altered here
+
+
+		m.graph.new_node(
+			parameter="Mu-Dest",
+			children=[
+				mode5codes.AUTO,
+				hired_car,
 				mode5codes.TRANSIT,
 			],
 			name="actualdest",
@@ -161,9 +173,14 @@ def model_builder(
 				+ P("ovtt") * X(f"altdest{i + 1:04d}_transit_approach_walktime")
 				+ P("ovtt") * X(f"altdest{i + 1:04d}_transit_approach_waittime")
 		) + utility_destination
+		hired_car = m.graph.new_node(
+			parameter="Mu-HiredCar",
+			children=[jTNC1, jTNC2, jTAXI],
+			name=f"hiredcar-altdest{i + 1:04d}",
+		)
 		m.graph.new_node(
-			parameter="Mu",
-			children=[jAUTO, jTNC1, jTNC2, jTAXI, jTRANSIT],
+			parameter="Mu-Dest",
+			children=[jAUTO, hired_car, jTRANSIT],
 			name=f"altdest{i + 1:04d}",
 		)
 
@@ -188,5 +205,10 @@ def model_builder(
 		)
 	else:
 		m.set_values(**parameter_values)
+
+	from larch.model.constraints import RatioBound
+	c1 = RatioBound(P("ovtt"), P("transit_ivtt"), min_ratio=1.5, max_ratio=3.0, scale=1)
+	c2 = RatioBound(P("Mu-HiredCar"), P("Mu-Dest"), min_ratio=1e-5, max_ratio=1.0, scale=1)
+	m.constraints = [c1,c2]
 
 	return m
