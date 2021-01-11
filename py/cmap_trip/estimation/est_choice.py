@@ -287,7 +287,7 @@ for purpose, purpose_a in purposes:
 	m.diagnosis = m.doctor(repair_ch_av="-")
 
 
-with open(dh.filenames.choice_model_param_file, 'w') as cmp_yaml:
+with open(dh.filenames.choice_model_param_file, 'w', encoding="utf-8") as cmp_yaml:
 	print("---", file=cmp_yaml)
 	for purpose, purpose_a in purposes:
 		print(f"{purpose}:", file=cmp_yaml)
