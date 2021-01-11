@@ -139,6 +139,8 @@ class FileNames:
 		if item == 'tripgen_sas':
 			return latest_matching(
 				self.emme_database_dir / "tg*.sas7bdat"
+			) or latest_matching(
+				self.cache_dir / "tg*.sas7bdat"
 			)
 		raise AttributeError(item)
 
