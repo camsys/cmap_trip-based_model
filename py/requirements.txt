@@ -2,3 +2,4 @@ numpy
 scipy
 pandas
 addict>=2.2
+larch

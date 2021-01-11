@@ -22,9 +22,9 @@ def L(*args):
 		log.info(s.replace("\n","\n    "))
 
 
-from cmap_trip.transit_approach import transit_approach
+from ..transit_approach import transit_approach
 from .est_data import dh
-from cmap_trip.choice_model import model_builder
+from ..choice_model import model_builder
 
 from .est_config import mode_modeled
 from .est_survey import trips
@@ -79,7 +79,7 @@ trips['tnc_wait_time'] = (
 		+ trips_origin.map(tnc_wait_op) * ~trips.in_peak
 )
 
-from cmap_trip.tnc_costs import tnc_solo_cost, taxi_cost
+from ..tnc_costs import tnc_solo_cost, taxi_cost
 
 trips['taxi_fare'] = taxi_cost(
 	dh,
