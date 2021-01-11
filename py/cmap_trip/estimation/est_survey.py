@@ -22,8 +22,6 @@ cfg = dh.cfg
 skims = dh.skims
 
 
-SURVEY_DATA_DIR = "../HTS/preproc"
-AE_DATA_DIR = "../HTS/cmap-proc"
 TRIPS_CACHE_FILE = "trips_with_ae_v10"
 
 hh = pd.read_csv(dh.SURVEY_DATA_DIR / 'household.csv')
