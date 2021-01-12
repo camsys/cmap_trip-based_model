@@ -81,6 +81,11 @@ def start_memory_tracing():
 	tracemalloc.start()
 
 
+def stop_memory_tracing():
+	import tracemalloc
+	tracemalloc.stop()
+
+
 def ping_memory_tracing():
 	import tracemalloc
 	current, peak = tracemalloc.get_traced_memory()

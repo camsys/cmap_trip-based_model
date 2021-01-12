@@ -29,6 +29,7 @@ from ..choice_model import model_builder
 from .est_config import mode_modeled
 from .est_survey import trips
 from .est_sample_dest import sample_dest_zones_and_data
+from ..util import resource_usage
 
 
 
@@ -513,3 +514,6 @@ for purpose, m in mods.items():
 			heading="Mode Choice by Distance",
 		)
 	xl.save()
+
+resource_usage.check()
+L("## est_choice complete ##")
