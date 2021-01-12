@@ -19,6 +19,15 @@ class DataHandler:
 	serial_dir = PathAttr()
 
 	def __init__(self, filenames=None, serial_dir=None, **kwargs):
+		
+		self.artifacts = {}
+		# artifacts tell how to reload things if they are not cached
+		# this makes it easier to pass this DataHandler to subprocesses,
+		# as we don't need to serialize data that is already serialized.
+
+		self._cache = {}
+		# the _cache is where we store things that we have already loaded
+		# in this process, so they are available in RAM already.
 
 		log.debug("load filenames")
 		if filenames is None:
@@ -29,10 +38,8 @@ class DataHandler:
 			self._temporary_dir = tempfile.TemporaryDirectory()
 			serial_dir = self._temporary_dir.name
 
-		log.debug("basic init")
+		log.debug("serial_dir init")
 		self.serial_dir = serial_dir
-		self.artifacts = {}
-		self._cache = {}
 
 		log.debug("filenames init")
 		self.filenames = filenames
