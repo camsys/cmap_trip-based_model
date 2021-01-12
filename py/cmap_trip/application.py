@@ -6,7 +6,7 @@ from larch.util.dataframe import columnize
 import re
 from addict import Dict
 
-from .tnc_costs import taxi_cost, tnc_solo_cost
+from .tnc_costs import taxi_cost, tnc_solo_cost, tnc_pool_cost
 from .transit_approach import transit_approach
 from .choice_model import model_builder
 from .random_states import check_random_state
@@ -90,11 +90,16 @@ def _data_for_application_1(dh, otaz=1, peak=True, purpose='HBWH', replication=N
 	df1['tnc_solo_fare'] = tnc_solo_cost(
 		dh, df1['auto_time'], df1['auto_dist'], df1['otaz'], df1['dtaz'],
 	)
+	df1['tnc_pool_fare'] = tnc_pool_cost(
+		dh, df1['auto_time'], df1['auto_dist'], df1['otaz'], df1['dtaz'],
+	)
 	if peak:
-		df1['tnc_wait_time'] = dh.m01['tnc_wait_pk'][otaz]
+		df1['tnc_solo_wait_time'] = dh.m01['tnc_solo_wait_pk'][otaz]
+		df1['tnc_pool_wait_time'] = dh.m01['tnc_pool_wait_pk'][otaz]
 		df1['taxi_wait_time'] = dh.m01['taxi_wait_pk'][otaz]
 	else:
-		df1['tnc_wait_time'] = dh.m01['tnc_wait_op'][otaz]
+		df1['tnc_solo_wait_time'] = dh.m01['tnc_solo_wait_op'][otaz]
+		df1['tnc_pool_wait_time'] = dh.m01['tnc_pool_wait_op'][otaz]
 		df1['taxi_wait_time'] = dh.m01['taxi_wait_op'][otaz]
 
 	df2 = pd.concat([df1.drop(columns=['otaz'])] * replication)

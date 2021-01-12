@@ -76,6 +76,7 @@ class DataHandler:
 		parking = load_cbd_parking(filenames)
 		self['cbd_parking_prices'] = parking.cbd_parking_prices
 		self['cbd_parking_price_prob'] = parking.cbd_parking_price_prob
+		self['cbd_parking'] = parking.cbd_parking
 		self['cbd_parking2'] = parking.cbd_parking2
 		self['CBD_PARKING_ZONES'] = parking.CBD_PARKING_ZONES
 

@@ -40,7 +40,9 @@ def load_m01(filenames):
 	m01.HW['taxi_wait_pk'] = m01.HW.zone_type.map(filenames.cfg.taxi.wait_time.peak)
 	m01.HW['taxi_wait_op'] = m01.HW.zone_type.map(filenames.cfg.taxi.wait_time.offpeak)
 
-	m01.HW['tnc_wait_pk'] = m01.HW.zone_type.map(filenames.cfg.tnc.wait_time.peak)
-	m01.HW['tnc_wait_op'] = m01.HW.zone_type.map(filenames.cfg.tnc.wait_time.offpeak)
+	m01.HW['tnc_solo_wait_pk'] = m01.HW.zone_type.map(filenames.cfg.tnc.wait_time.peak)
+	m01.HW['tnc_solo_wait_op'] = m01.HW.zone_type.map(filenames.cfg.tnc.wait_time.offpeak)
+	m01.HW['tnc_pool_wait_pk'] = m01.HW.zone_type.map(filenames.cfg.tnc_pooled.wait_time.peak)
+	m01.HW['tnc_pool_wait_op'] = m01.HW.zone_type.map(filenames.cfg.tnc_pooled.wait_time.offpeak)
 
 	return m01.HW

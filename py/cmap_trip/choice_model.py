@@ -85,11 +85,13 @@ def model_builder(
 				P.Const_TNC1
 				+ P("cost") * X(f"tnc_solo_cost") / 100.0
 				+ P("tnc_time") * X(f"auto_time")
+				+ P("ovtt") * X("tnc_solo_wait_time")
 		) + utility_destination
 		m.utility_co[mode5codes.TNC2] = (
 				P.Const_TNC2
-				+ P("cost") * X(f"tnc_solo_cost") / 100.0  # TODO TNC Shared cost
+				+ P("cost") * X(f"tnc_pool_cost") / 100.0
 				+ P("tnc_time") * X(f"auto_time")
+				+ P("ovtt") * X("tnc_pool_wait_time")
 		) + utility_destination
 		m.utility_co[mode5codes.TAXI] = (
 				P.Const_TAXI
@@ -151,13 +153,13 @@ def model_builder(
 		m.utility_co[jTNC1] = (
 				P.Const_TNC1
 				+ P("cost") * X(f"altdest{i + 1:04d}_tnc_solo_fare") / 100.0
-				+ P("ovtt") * X(f"altdest{i + 1:04d}_tnc_wait_time")
+				+ P("ovtt") * X(f"altdest{i + 1:04d}_tnc_solo_wait_time")
 				+ P("tnc_time") * X(f"altdest{i + 1:04d}_auto_time")
 		) + utility_destination
 		m.utility_co[jTNC2] = (
 				P.Const_TNC2
-				+ P("cost") * X(f"altdest{i + 1:04d}_tnc_solo_fare") / 100.0 # TODO - shared trip fares
-				+ P("ovtt") * X(f"altdest{i + 1:04d}_tnc_wait_time")
+				+ P("cost") * X(f"altdest{i + 1:04d}_tnc_pool_fare") / 100.0
+				+ P("ovtt") * X(f"altdest{i + 1:04d}_tnc_pool_wait_time")
 				+ P("tnc_time") * X(f"altdest{i + 1:04d}_auto_time")
 		) + utility_destination
 		m.utility_co[jTAXI] = (

@@ -40,6 +40,7 @@ def load_cbd_parking(filenames):
 	)
 
 	parking = Dict()
+	parking.cbd_parking = cbd_parking
 	parking.cbd_parking_prices = cbd_parking_prices
 	parking.cbd_parking_price_prob = cbd_parking_price_prob
 	parking.cbd_parking2 = cbd_parking2

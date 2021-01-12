@@ -6,7 +6,7 @@ from .est_data import dh
 skims = dh.skims
 zone_shp = dh.zone_shp
 m01 = dh.m01
-from cmap_trip.tnc_costs import taxi_cost, tnc_solo_cost
+from cmap_trip.tnc_costs import taxi_cost, tnc_solo_cost, tnc_pool_cost
 
 log = cmap_trip.log_to_stderr(level=10)
 
@@ -134,11 +134,17 @@ def sample_dest_zones_and_data(
 				origin_zone.map(taxi_wait_pk) * trips.in_peak
 				+ origin_zone.map(taxi_wait_op) * ~trips.in_peak
 		)
-		tnc_wait_pk = m01['tnc_wait_pk']
-		tnc_wait_op = m01['tnc_wait_op']
-		trip_alt_dest_df[f'{labeler(i)}_tnc_wait_time'] = (
-				origin_zone.map(tnc_wait_pk) * trips.in_peak
-				+ origin_zone.map(tnc_wait_op) * ~trips.in_peak
+		tnc_solo_wait_pk = m01['tnc_solo_wait_pk']
+		tnc_solo_wait_op = m01['tnc_solo_wait_op']
+		trip_alt_dest_df[f'{labeler(i)}_tnc_solo_wait_time'] = (
+				origin_zone.map(tnc_solo_wait_pk) * trips.in_peak
+				+ origin_zone.map(tnc_solo_wait_op) * ~trips.in_peak
+		)
+		tnc_pool_wait_pk = m01['tnc_pool_wait_pk']
+		tnc_pool_wait_op = m01['tnc_pool_wait_op']
+		trip_alt_dest_df[f'{labeler(i)}_tnc_pool_wait_time'] = (
+				origin_zone.map(tnc_pool_wait_pk) * trips.in_peak
+				+ origin_zone.map(tnc_pool_wait_op) * ~trips.in_peak
 		)
 		# Add taxi and TNC fare data
 		trip_alt_dest_df[f'{labeler(i)}_taxi_fare'] = taxi_cost(
@@ -149,6 +155,13 @@ def sample_dest_zones_and_data(
 			destin_zone,
 		)
 		trip_alt_dest_df[f'{labeler(i)}_tnc_solo_fare'] = tnc_solo_cost(
+			dh,
+			trip_alt_dest_df[f'{labeler(i)}_auto_time'],
+			trip_alt_dest_df[f'{labeler(i)}_auto_dist'],
+			origin_zone,
+			destin_zone,
+		)
+		trip_alt_dest_df[f'{labeler(i)}_tnc_pool_fare'] = tnc_pool_cost(
 			dh,
 			trip_alt_dest_df[f'{labeler(i)}_auto_time'],
 			trip_alt_dest_df[f'{labeler(i)}_auto_dist'],

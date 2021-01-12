@@ -73,14 +73,21 @@ trips['taxi_wait_time'] = (
 		+ trips_origin.map(taxi_wait_op) * ~trips.in_peak
 )
 
-tnc_wait_pk = dh.m01['tnc_wait_pk']
-tnc_wait_op = dh.m01['tnc_wait_op']
-trips['tnc_wait_time'] = (
-		trips_origin.map(tnc_wait_pk) * trips.in_peak
-		+ trips_origin.map(tnc_wait_op) * ~trips.in_peak
+tnc_solo_wait_pk = dh.m01['tnc_solo_wait_pk']
+tnc_solo_wait_op = dh.m01['tnc_solo_wait_op']
+trips['tnc_solo_wait_time'] = (
+		trips_origin.map(tnc_solo_wait_pk) * trips.in_peak
+		+ trips_origin.map(tnc_solo_wait_op) * ~trips.in_peak
 )
 
-from ..tnc_costs import tnc_solo_cost, taxi_cost
+tnc_pool_wait_pk = dh.m01['tnc_pool_wait_pk']
+tnc_pool_wait_op = dh.m01['tnc_pool_wait_op']
+trips['tnc_pool_wait_time'] = (
+		trips_origin.map(tnc_pool_wait_pk) * trips.in_peak
+		+ trips_origin.map(tnc_pool_wait_op) * ~trips.in_peak
+)
+
+from ..tnc_costs import tnc_solo_cost, taxi_cost, tnc_pool_cost
 
 trips['taxi_fare'] = taxi_cost(
 	dh,
@@ -97,6 +104,15 @@ trips['tnc_solo_cost'] = tnc_solo_cost(
 	trips['o_zone'],
 	trips['d_zone'],
 )
+
+trips['tnc_pool_cost'] = tnc_pool_cost(
+	dh,
+	trips['auto_time'],
+	trips['auto_dist'],
+	trips['o_zone'],
+	trips['d_zone'],
+)
+
 
 L("## sample_dest_zones_and_data ##")
 trip_alt_df = sample_dest_zones_and_data(
@@ -122,8 +138,10 @@ trip_alt_df = sample_dest_zones_and_data(
 		'transit_approach_waittime',
 		'taxi_wait_time',
 		'taxi_fare',
-		'tnc_wait_time',
+		'tnc_solo_wait_time',
+		'tnc_pool_wait_time',
 		'tnc_solo_cost',
+		'tnc_pool_cost',
 		'hhinc2',
 	]
 )
