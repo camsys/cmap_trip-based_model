@@ -4,6 +4,9 @@ import larch
 from larch import P,X
 from larch.util.data_expansion import piecewise_linear
 from addict import Dict
+from .cmap_logging import getLogger
+
+log = getLogger()
 
 mode5codes = Dict({'AUTO': 1, 'TAXI': 2, 'TNC1': 3, 'TNC2': 4, 'TRANSIT': 5})
 

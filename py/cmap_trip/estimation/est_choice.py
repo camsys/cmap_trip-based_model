@@ -124,6 +124,7 @@ trip_alt_df = sample_dest_zones_and_data(
 		'taxi_fare',
 		'tnc_wait_time',
 		'tnc_solo_cost',
+		'hhinc2',
 	]
 )
 
