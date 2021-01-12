@@ -314,7 +314,16 @@ def choice_simulator_trips(dh, purpose, otaz, random_state=None):
 
 
 
-def choice_simulator_trips_many(dh, purpose, otaz, chunk_size=20, n_jobs=5):
+def choice_simulator_trips_many(dh, purpose, otaz, max_chunk_size=20, n_jobs=5, init_step=False):
+
+	# auto chunk size calculation
+	n_chunks_per_job = 0
+	chunk_size = np.inf
+	while chunk_size > max_chunk_size:
+		n_chunks_per_job += 1
+		chunk_size = int(np.ceil(len(otaz) / n_jobs / n_chunks_per_job))
+		if chunk_size == 1:
+			break
 
 	otaz_chunks = [otaz[i:i + chunk_size] for i in range(0, len(otaz), chunk_size)]
 	init_chunks = [otaz[i:i+1] for i in range(0,min(len(otaz),n_jobs))]
@@ -322,12 +331,15 @@ def choice_simulator_trips_many(dh, purpose, otaz, chunk_size=20, n_jobs=5):
 	import joblib
 
 	with joblib.Parallel(n_jobs=n_jobs) as parallel:
-		log.info("joblib model init starting")
-		_ = parallel(
-			joblib.delayed(choice_simulator_trips)(dh, purpose, otaz_chunk)
-			for otaz_chunk in init_chunks
-		)
-		log.info("joblib model init complete")
+		if init_step:
+			log.info("joblib model init starting")
+			_ = parallel(
+				joblib.delayed(choice_simulator_trips)(dh, purpose, otaz_chunk)
+				for otaz_chunk in init_chunks
+			)
+			log.info("joblib model init complete")
+		else:
+			log.info("joblib model body starting")
 		parts = parallel(
 			joblib.delayed(choice_simulator_trips)(dh, purpose, otaz_chunk)
 			for otaz_chunk in otaz_chunks

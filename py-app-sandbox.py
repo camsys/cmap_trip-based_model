@@ -22,7 +22,7 @@ sim_trips5 = choice_simulator_trips_many(
     dh,
     purpose="HBWH",
     otaz=np.arange(1, 1+360),
-    chunk_size=15,
+    max_chunk_size=15,
     n_jobs=8,
 )
 
