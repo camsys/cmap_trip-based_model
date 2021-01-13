@@ -24,7 +24,7 @@ cfg = dh.cfg
 skims = dh.skims
 
 
-TRIPS_CACHE_FILE = "trips_with_ae_v11"
+TRIPS_CACHE_FILE = "trips_with_ae_v12"
 
 hh = pd.read_csv(dh.SURVEY_DATA_DIR / 'household.csv')
 ae = pd.read_csv(dh.AE_DATA_DIR / 'access_egress.csv')

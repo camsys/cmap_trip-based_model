@@ -103,6 +103,7 @@ trips['tnc_solo_cost'] = tnc_solo_cost(
 	trips['auto_dist'],
 	trips['o_zone'],
 	trips['d_zone'],
+	trips['in_peak'],
 )
 
 trips['tnc_pool_cost'] = tnc_pool_cost(
@@ -111,6 +112,7 @@ trips['tnc_pool_cost'] = tnc_pool_cost(
 	trips['auto_dist'],
 	trips['o_zone'],
 	trips['d_zone'],
+	trips['in_peak'],
 )
 
 

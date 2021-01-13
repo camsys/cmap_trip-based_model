@@ -160,6 +160,7 @@ def sample_dest_zones_and_data(
 			trip_alt_dest_df[f'{labeler(i)}_auto_dist'],
 			origin_zone,
 			destin_zone,
+			trip_alt_dest_df['in_peak'],
 		)
 		trip_alt_dest_df[f'{labeler(i)}_tnc_pool_fare'] = tnc_pool_cost(
 			dh,
@@ -167,6 +168,7 @@ def sample_dest_zones_and_data(
 			trip_alt_dest_df[f'{labeler(i)}_auto_dist'],
 			origin_zone,
 			destin_zone,
+			trip_alt_dest_df['in_peak'],
 		)
 
 		# attach transit skims

@@ -88,10 +88,10 @@ def _data_for_application_1(dh, otaz=1, peak=True, purpose='HBWH', replication=N
 		dh, df1['auto_time'], df1['auto_dist'], df1['otaz'], df1['dtaz'],
 	)
 	df1['tnc_solo_fare'] = tnc_solo_cost(
-		dh, df1['auto_time'], df1['auto_dist'], df1['otaz'], df1['dtaz'],
+		dh, df1['auto_time'], df1['auto_dist'], df1['otaz'], df1['dtaz'], peak,
 	)
 	df1['tnc_pool_fare'] = tnc_pool_cost(
-		dh, df1['auto_time'], df1['auto_dist'], df1['otaz'], df1['dtaz'],
+		dh, df1['auto_time'], df1['auto_dist'], df1['otaz'], df1['dtaz'], peak,
 	)
 	if peak:
 		df1['tnc_solo_wait_time'] = dh.m01['tnc_solo_wait_pk'][otaz]

@@ -67,11 +67,18 @@ taxi:
 
 tnc:
   cost:
-    base_fare: 179          # cents, initial base fare
-    per_mile: 81            # cents
-    per_minute: 28          # cents per minute
-    min_fare: 485           # cents
-    booking_fee: 257        # cents, fixed cost not included in min fare, in 2019 $1.85 to the company, 72¢ taxes
+    peak:
+      base_fare: 136          # cents, initial base fare
+      per_mile: 109           # cents
+      per_minute: 28          # cents per minute
+      min_fare: 485           # cents
+      booking_fee: 257        # cents, fixed cost not included in min fare, in 2019 $1.85 to the company, 72¢ taxes
+    offpeak:
+      base_fare: 163          # cents, initial base fare
+      per_mile: 109           # cents
+      per_minute: 26          # cents per minute
+      min_fare: 485           # cents
+      booking_fee: 257        # cents, fixed cost not included in min fare, in 2019 $1.85 to the company, 72¢ taxes
   wait_time:    # in minutes, by zone area type:
     peak:
       1: 1      #  Chicago Central Area zone
@@ -101,11 +108,18 @@ tnc:
 
 tnc_pooled:
   cost:
-    base_fare: 170          # cents, initial base fare
-    per_mile: 90            # cents
-    per_minute: 14          # cents per minute
-    min_fare: 420           # cents
-    booking_fee: 257        # cents, fixed cost not included in min fare, in 2019 $1.85 to the company, 72¢ taxes
+    peak:
+      base_fare: 68           # cents, initial base fare
+      per_mile: 106           # cents
+      per_minute: 0           # cents per minute
+      min_fare: 0             # cents
+      booking_fee: 257        # cents, fixed cost not included in min fare, in 2019 $1.85 to the company, 72¢ taxes
+    offpeak:
+      base_fare: 128          # cents, initial base fare
+      per_mile: 101           # cents
+      per_minute: 0           # cents per minute
+      min_fare: 0             # cents
+      booking_fee: 257        # cents, fixed cost not included in min fare, in 2019 $1.85 to the company, 72¢ taxes
   wait_time:    # in minutes, by zone area type:
     peak:
       1: 1      #  Chicago Central Area zone
