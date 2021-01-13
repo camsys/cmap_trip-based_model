@@ -80,6 +80,8 @@ def model_builder(
 		m.utility_co[mode5codes.AUTO] = (
 				+ P("cost") * X(f"auto_dist") * auto_cost_per_mile / 100.0
 				+ P("auto_time") * X(f"auto_time")
+				+ P("cost") * X("auto_parking_cost")
+				# TODO add walk terminal time cost
 		) + utility_destination
 		m.utility_co[mode5codes.TNC1] = (
 				P.Const_TNC1
@@ -149,6 +151,8 @@ def model_builder(
 		m.utility_co[jAUTO] = (
 				+ P("cost") * X(f"altdest{i + 1:04d}_auto_dist") * auto_cost_per_mile / 100.0
 				+ P("auto_time") * X(f"altdest{i + 1:04d}_auto_time")
+				+ P("cost") * X(f"altdest{i + 1:04d}_auto_parking_cost")
+				# TODO add walk terminal time cost
 		) + utility_destination
 		m.utility_co[jTNC1] = (
 				P.Const_TNC1

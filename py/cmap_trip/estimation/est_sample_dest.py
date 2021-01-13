@@ -202,5 +202,20 @@ def sample_dest_zones_and_data(
 			x = trip_alt_dest_df[f'{labeler(i)}_transit_{j}']
 			trip_alt_dest_df.loc[x>999, f'{labeler(i)}_transit_{j}'] = np.nan
 
+		# parking costs
+		from ..parking_costs import parking_cost_v2
+		for purpose in ['HW', 'HO', 'NH']:
+			q = (trip_alt_dest_df.tripPurpose == purpose)
+			_parking_cost, _free_parking = parking_cost_v2(
+				dh,
+				destin_zone[q],
+				trip_alt_dest_df.loc[q,'hhinc_dollars'],
+				dh.cfg.default_activity_durations[purpose],
+				purpose,
+				random_state=hash(purpose) + 1,
+			)
+			trip_alt_dest_df.loc[q,f'{labeler(i)}_auto_parking_cost'] = _parking_cost
+			trip_alt_dest_df.loc[q,f'{labeler(i)}_auto_parking_free'] = _free_parking
+
 	return trip_alt_dest_df
 

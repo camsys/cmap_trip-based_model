@@ -128,6 +128,7 @@ trip_alt_df = sample_dest_zones_and_data(
 		'tripPurpose',
 		'auto_dist',
 		'auto_time',
+		'auto_parking_cost',
 		'transit_fare',
 		'transit_ivtt',
 		'transit_ovtt',
@@ -142,7 +143,7 @@ trip_alt_df = sample_dest_zones_and_data(
 		'tnc_pool_wait_time',
 		'tnc_solo_cost',
 		'tnc_pool_cost',
-		'hhinc2',
+		'hhinc_dollars',
 	]
 )
 

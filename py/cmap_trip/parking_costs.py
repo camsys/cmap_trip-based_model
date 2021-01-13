@@ -193,7 +193,7 @@ def parking_cost_v2(
 
 	# Assemble default hourly pricing to use for trips based on zone type
 	# This Series is len(Zones) not len(Trips)
-	zonetype_price = dh.m01[purpose].zone_type.map(dh.cfg.parking_costs.defaults[purpose])
+	zonetype_price = dh.m01.zone_type.map(dh.cfg.parking_costs.defaults[purpose])
 
 	# Fill in NaNs with default values.
 	parking_price_2 = DEST.map(zonetype_price)
@@ -208,12 +208,13 @@ def parking_cost_v2(
 		FREEPRK[k] = dh.cbd_parking2.FreeParkingPct.iloc[j2]
 
 	# Zero out parking price if the traveler gets free parking
-	parking_price[rand_free_parking <= FREEPRK] = 0
+	free_parking = (rand_free_parking <= FREEPRK)
+	parking_price[free_parking] = 0
 
 	# Scale up based on number of hours of parking
 	parking_price *= HOURS
 
-	return parking_price
+	return parking_price, free_parking
 
 	# PZONE = CBD_PARKING_ZONES[DEST]
 	# FREEPRK = np.empty(ITER)

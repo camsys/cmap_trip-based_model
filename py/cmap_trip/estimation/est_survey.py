@@ -7,6 +7,8 @@ import pandas as pd
 import numpy as np
 from os.path import join as pj
 from .est_config import mode_modeled, mode_modeled5
+from ..incomes import income_levels_1, income_levels_2
+
 import cmap_trip
 from .est_data import dh
 from cmap_trip.modecodes import (
@@ -22,7 +24,7 @@ cfg = dh.cfg
 skims = dh.skims
 
 
-TRIPS_CACHE_FILE = "trips_with_ae_v10"
+TRIPS_CACHE_FILE = "trips_with_ae_v11"
 
 hh = pd.read_csv(dh.SURVEY_DATA_DIR / 'household.csv')
 ae = pd.read_csv(dh.AE_DATA_DIR / 'access_egress.csv')
@@ -41,7 +43,7 @@ core_cbd_zones = [
 trips = dh.filenames.load(TRIPS_CACHE_FILE)
 if trips is None:
 
-	trips = pd.read_csv(dh.SURVEY_DATA_DIR,'trips.csv')
+	trips = pd.read_csv(dh.SURVEY_DATA_DIR / 'trips.csv')
 
 	# Convert trips to 3 modes only (auto, transit, tnc), and drop all other trips
 	trips['mode3'] = trips['mode'].map(mode_modeled).astype('category')
@@ -94,8 +96,14 @@ if trips is None:
 	trips['in_pm_peak'] = trips['depHour'].between(14.5,19) | trips['arrHour'].between(14.5,19)
 	trips['in_peak'] = trips['in_am_peak'] | trips['in_pm_peak']
 
+	hhinc_dollars = trips.hhinc.map(income_levels_1)
+	hhinc_dollars = hhinc_dollars.fillna(trips.hhinc2.map(income_levels_2))
+	hhinc_dollars = hhinc_dollars.fillna(57_999)
+	trips['hhinc_dollars'] = hhinc_dollars
+
 	# Append skims to trips
 	for k, s in skims.items():
+		if k not in ('auto', 'transit_pk', 'transit_op'): continue
 		log.debug(f"adding skims for {k}")
 		trips_1 = s.raw.get_rc_dataframe(trips[pz]-1, trips[az]-1)
 		renames = dict([(value, f"{k}_{key}") for key, value in s.col_mapping.items()])
@@ -104,7 +112,7 @@ if trips is None:
 
 	# Append reverse transit skims to trips
 	for k, s in skims.items():
-		if k == 'auto': continue
+		if k not in ('transit_pk', 'transit_op'): continue
 		log.debug(f"adding reverse skims for {k}")
 		trips_1 = s.raw.get_rc_dataframe(trips[pz]-1, trips[az]-1)
 		renames = dict([(value, f"{k}_{key}_reverse") for key, value in s.col_mapping.items()])
@@ -141,13 +149,14 @@ if trips is None:
 		trips[f'ae_waittime_{t}'] = 0
 
 	trips[f'auto_parking_cost'] = 0
-	from cmap_trip.transit_approach import transit_approach
-	from cmap_trip.parking_costs import parking_cost_v2
+	from ..transit_approach import transit_approach
+	from ..parking_costs import parking_cost_v2
 
 	for purpose in ['HW','HO','NH']:
 		q = (trips.tripPurpose == purpose)
 		_trips_by_purpose = trips[q]
 		result_purpose = transit_approach(
+			dh,
 			_trips_by_purpose.o_zone,
 			_trips_by_purpose.d_zone,
 			purpose,
@@ -163,14 +172,16 @@ if trips is None:
 			trips.loc[q, f'ae_{key}_single'] = result_purpose[key][:,0]
 
 		# Attach parking costs
-		_parking_cost = parking_cost_v2(
+		_parking_cost, _free_parking = parking_cost_v2(
+			dh,
 			_trips_by_purpose.d_zone,
-			_trips_by_purpose.hhinc,
+			_trips_by_purpose.hhinc_dollars,
 			cfg.default_activity_durations[purpose],
 			purpose,
 			random_state=hash(purpose)+1,
 		)
 		trips.loc[q, f'auto_parking_cost'] = _parking_cost
+		trips.loc[q, f'auto_parking_free'] = _free_parking
 
 	# for n in trips.index:
 	# 	out = transit_approach(
