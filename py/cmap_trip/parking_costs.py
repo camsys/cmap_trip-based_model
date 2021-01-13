@@ -193,7 +193,7 @@ def parking_cost_v2(
 
 	# Assemble default hourly pricing to use for trips based on zone type
 	# This Series is len(Zones) not len(Trips)
-	zonetype_price = dh.m01[purpose].zone_type.map(dh.cfg.default_parking_costs[purpose])
+	zonetype_price = dh.m01[purpose].zone_type.map(dh.cfg.parking_costs.defaults[purpose])
 
 	# Fill in NaNs with default values.
 	parking_price_2 = DEST.map(zonetype_price)

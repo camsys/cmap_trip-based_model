@@ -311,8 +311,10 @@ with open(dh.filenames.choice_model_param_file, 'w', encoding="utf-8") as cmp_ya
 	print("---", file=cmp_yaml)
 	for purpose, purpose_a in purposes:
 		print(f"{purpose}:", file=cmp_yaml)
-		for k, v in mods.HBWH.pf.value.items():
-			print(f"  {k:20s}: {v}", file=cmp_yaml)
+		for k, v in mods[purpose].pf.value.items():
+			if ':' in k:
+				k = f'"{k}"'
+			print(f'  {k:24s}: {v}', file=cmp_yaml)
 		print("", file=cmp_yaml)
 	print("...", file=cmp_yaml)
 

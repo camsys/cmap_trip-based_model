@@ -12,9 +12,6 @@ def load_cbd_parking(filenames):
 	cbd_parking.CumProb /= 10000.
 	# cbd_parking['SumPrice'] = cbd_parking.ThresholdPrice + cbd_parking.SavePrice
 	cbd_parking['rownum'] = cbd_parking.groupby(['ZoneID']).cumcount()
-	_z = cbd_parking.ZoneID.value_counts().sort_index().index
-	CBD_PARKING_ZONES = dict(zip(_z, np.arange(len(_z))))
-
 
 	def decumulate(x):
 		x_ = np.array(x)
@@ -24,6 +21,15 @@ def load_cbd_parking(filenames):
 	cbd_parking['WeightedPrice'] = cbd_parking['Prob'] * cbd_parking['ThresholdPrice']
 	cbd_parking_prices = cbd_parking.set_index(["ZoneID",'rownum']).ThresholdPrice.unstack()
 	cbd_parking_price_prob = cbd_parking.set_index(["ZoneID",'rownum']).Prob.unstack()
+
+	for zone_to, zone_source in filenames.cfg.parking_costs.cbd_nearby.items():
+		cbd_parking_prices.loc[zone_to] = cbd_parking_prices.loc[zone_source]
+		cbd_parking_price_prob.loc[zone_to] = cbd_parking_price_prob.loc[zone_source]
+
+	cbd_parking_prices.sort_index(inplace=True)
+	cbd_parking_price_prob.sort_index(inplace=True)
+
+	CBD_PARKING_ZONES = dict(zip(cbd_parking_prices.index, np.arange(len(cbd_parking_prices.index))))
 
 	cbd_parking2 = pd.read_csv(
 		filenames.HW_CBDPARK2,
