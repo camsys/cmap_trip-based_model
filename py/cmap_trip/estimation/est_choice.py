@@ -43,9 +43,6 @@ L(
 
 L("###### sample_dest_zones_and_data ######")
 
-trips['mode3code'] = trips.mode3.cat.codes + 1
-trips['mode5code'] = trips.mode5.cat.codes + 1
-
 mode5codes = Dict(zip(
 	trips.mode5.cat.categories,
 	np.arange(len(trips.mode5.cat.categories)) + 1,
@@ -62,62 +59,62 @@ L("## ae_approach_los ##")
 from .est_survey import ae_approach_los
 
 trip_approach_distances, ae_los = ae_approach_los(trips)
-
-flipY = trips.paFlip
-flipN = 1 - trips.paFlip
-
-trips_origin = trips.o_zone * flipN + trips.d_zone * flipY
-
-taxi_wait_pk = dh.m01['taxi_wait_pk']
-taxi_wait_op = dh.m01['taxi_wait_op']
-trips['taxi_wait_time'] = (
-		trips_origin.map(taxi_wait_pk) * trips.in_peak
-		+ trips_origin.map(taxi_wait_op) * ~trips.in_peak
-)
-
-tnc_solo_wait_pk = dh.m01['tnc_solo_wait_pk']
-tnc_solo_wait_op = dh.m01['tnc_solo_wait_op']
-trips['tnc_solo_wait_time'] = (
-		trips_origin.map(tnc_solo_wait_pk) * trips.in_peak
-		+ trips_origin.map(tnc_solo_wait_op) * ~trips.in_peak
-)
-
-tnc_pool_wait_pk = dh.m01['tnc_pool_wait_pk']
-tnc_pool_wait_op = dh.m01['tnc_pool_wait_op']
-trips['tnc_pool_wait_time'] = (
-		trips_origin.map(tnc_pool_wait_pk) * trips.in_peak
-		+ trips_origin.map(tnc_pool_wait_op) * ~trips.in_peak
-)
-
-from ..tnc_costs import tnc_solo_cost, taxi_cost, tnc_pool_cost
-
-trips['taxi_fare'] = taxi_cost(
-	dh,
-	trips['auto_time'],
-	trips['auto_dist'],
-	trips['o_zone'],
-	trips['d_zone'],
-)
-
-trips['tnc_solo_cost'] = tnc_solo_cost(
-	dh,
-	trips['auto_time'],
-	trips['auto_dist'],
-	trips['o_zone'],
-	trips['d_zone'],
-	trips['in_peak'],
-)
-
-trips['tnc_pool_cost'] = tnc_pool_cost(
-	dh,
-	trips['auto_time'],
-	trips['auto_dist'],
-	trips['o_zone'],
-	trips['d_zone'],
-	trips['in_peak'],
-)
-
-trips['mode_and_time'] = trips.mode5code + trips.timeperiod*5
+#
+# flipY = trips.paFlip
+# flipN = 1 - trips.paFlip
+#
+# trips_origin = trips.o_zone * flipN + trips.d_zone * flipY
+#
+# taxi_wait_pk = dh.m01['taxi_wait_pk']
+# taxi_wait_op = dh.m01['taxi_wait_op']
+# trips['taxi_wait_time'] = (
+# 		trips_origin.map(taxi_wait_pk) * trips.in_peak
+# 		+ trips_origin.map(taxi_wait_op) * ~trips.in_peak
+# )
+#
+# tnc_solo_wait_pk = dh.m01['tnc_solo_wait_pk']
+# tnc_solo_wait_op = dh.m01['tnc_solo_wait_op']
+# trips['tnc_solo_wait_time'] = (
+# 		trips_origin.map(tnc_solo_wait_pk) * trips.in_peak
+# 		+ trips_origin.map(tnc_solo_wait_op) * ~trips.in_peak
+# )
+#
+# tnc_pool_wait_pk = dh.m01['tnc_pool_wait_pk']
+# tnc_pool_wait_op = dh.m01['tnc_pool_wait_op']
+# trips['tnc_pool_wait_time'] = (
+# 		trips_origin.map(tnc_pool_wait_pk) * trips.in_peak
+# 		+ trips_origin.map(tnc_pool_wait_op) * ~trips.in_peak
+# )
+#
+# from ..tnc_costs import tnc_solo_cost, taxi_cost, tnc_pool_cost
+#
+# trips['taxi_fare'] = taxi_cost(
+# 	dh,
+# 	trips['auto_time'],
+# 	trips['auto_dist'],
+# 	trips['o_zone'],
+# 	trips['d_zone'],
+# )
+#
+# trips['tnc_solo_cost'] = tnc_solo_cost(
+# 	dh,
+# 	trips['auto_time'],
+# 	trips['auto_dist'],
+# 	trips['o_zone'],
+# 	trips['d_zone'],
+# 	trips['in_peak'],
+# )
+#
+# trips['tnc_pool_cost'] = tnc_pool_cost(
+# 	dh,
+# 	trips['auto_time'],
+# 	trips['auto_dist'],
+# 	trips['o_zone'],
+# 	trips['d_zone'],
+# 	trips['in_peak'],
+# )
+#
+# trips['mode_and_time'] = trips.mode5code + trips.timeperiod*5
 
 L("## sample_dest_zones_and_data ##")
 trip_alt_df = sample_dest_zones_and_data(
@@ -146,11 +143,12 @@ trip_alt_df = sample_dest_zones_and_data(
 		'taxi_fare',
 		'tnc_solo_wait_time',
 		'tnc_pool_wait_time',
-		'tnc_solo_cost',
-		'tnc_pool_cost',
+		'tnc_solo_fare',
+		'tnc_pool_fare',
 		'hhinc_dollars',
 		'timeperiod',
 		'mode_and_time',
+		'actualdest',
 	]
 )
 #
@@ -223,7 +221,7 @@ altdest_tags = lambda suffix: [
 
 # `ca_folds` defines how ca_folded (see below) is built
 ca_folds = {
-	"nAttractions": ['DzoneAttractions'] + altdest_tags("attractions"),
+	"nAttractions": ['actualdest_attractions'] + altdest_tags("attractions"),
 	"auto_dist": ['auto_dist'] + altdest_tags("auto_dist"),
 	"auto_time": ['auto_time'] + altdest_tags("auto_time"),
 }
@@ -266,7 +264,7 @@ for purpose, purpose_a in purposes:
 				].reset_index(
 					drop=True
 				).rename(
-					'DzoneAttractions'
+					'actualdest_attractions'
 				),
 				1e-300,  # nonzero but tiny
 			),
@@ -381,6 +379,12 @@ for purpose, m in mods.items():
 		m.to_xlsx(
 			cached_model_filename(purpose)
 		)
+		summary = m.most_recent_estimation_result.copy()
+		summary.pop('x', None)
+		summary.pop('d_loglike', None)
+		summary.pop('nit', None)
+		display(larch.util.dictx(summary).__xml__())
+		display(m.estimation_statistics())
 	_pr = m.probability(return_dataframe='names', include_nests=True)
 	n_elemental_alts = (n_sampled_dests+1)*5*n_timeperiods
 	Pr.ByDest[purpose] = _pr.iloc[:,n_elemental_alts+nests_per_dest-1:-1:nests_per_dest]

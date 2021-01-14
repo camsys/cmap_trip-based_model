@@ -6,7 +6,8 @@ from .est_data import dh
 skims = dh.skims
 zone_shp = dh.zone_shp
 m01 = dh.m01
-from cmap_trip.tnc_costs import taxi_cost, tnc_solo_cost, tnc_pool_cost
+from ..tnc_costs import taxi_cost, tnc_solo_cost, tnc_pool_cost
+from ..timeperiods import timeperiod_names
 
 log = cmap_trip.log_to_stderr(level=10)
 
@@ -78,7 +79,18 @@ def sample_dest_zones_and_data(
 		trips, n_zones, n_sampled_dests, wgt_func,
 	)
 
-	trip_alt_dest_df = trips[[ozone_col, 'in_peak', *keep_trips_cols]]
+	_keep_trips_cols = []
+	for k in keep_trips_cols:
+		if k in trips.columns:
+			_keep_trips_cols.append(k)
+		k = f"actualdest_{k}"
+		if k in trips.columns:
+			_keep_trips_cols.append(k)
+		for t in timeperiod_names:
+			if f"{k}_{t}" in trips.columns:
+				_keep_trips_cols.append(f"{k}_{t}")
+
+	trip_alt_dest_df = trips[[ozone_col, 'in_peak', *_keep_trips_cols]]
 
 	log.debug("trip_alt_dest_df.join()")
 	trip_alt_dest_df = trip_alt_dest_df.join(
@@ -88,7 +100,7 @@ def sample_dest_zones_and_data(
 			columns=[labeler(i) for i in range(trip_alt_dest.shape[1])],
 		)
 	)
-	trip_alt_dest_df['obs_samp_wgt'] = trip_obs_wgts
+	trip_alt_dest_df['actualdest_samp_wgt'] = trip_obs_wgts
 	trip_alt_dest_df = trip_alt_dest_df.join(
 		pd.DataFrame(
 			trip_alt_wgts,
@@ -113,19 +125,51 @@ def sample_dest_zones_and_data(
 			'o_zone',
 			labeler(i),
 			skims.auto.raw,
-			{
-				"in_peak": {
+			(
+				("in_peak", {
 					'mf44_amtime': f'{labeler(i)}_auto_time',
 					'mf45_amdist': f'{labeler(i)}_auto_dist',
-				},
-				"~in_peak": {
+				}),
+				("~in_peak", {
 					'mf46_mdtime': f'{labeler(i)}_auto_time',
 					'mf47_mddist': f'{labeler(i)}_auto_dist',
-				},
-				None: {
+				}),
+				(None, {
 					'mf47_mddist': f'{labeler(i)}_auto_op_dist',
-				},
-			},
+				}),
+				(None, {
+					'mf44_amtime': f'{labeler(i)}_auto_time_AM_PRE',
+					'mf45_amdist': f'{labeler(i)}_auto_dist_AM_PRE',
+				}),
+				(None, {
+					'mf44_amtime': f'{labeler(i)}_auto_time_AM_PEAK',
+					'mf45_amdist': f'{labeler(i)}_auto_dist_AM_PEAK',
+				}),
+				(None, {
+					'mf44_amtime': f'{labeler(i)}_auto_time_AM_POST',
+					'mf45_amdist': f'{labeler(i)}_auto_dist_AM_POST',
+				}),
+				(None, {
+					'mf44_amtime': f'{labeler(i)}_auto_time_PM_PRE',
+					'mf45_amdist': f'{labeler(i)}_auto_dist_PM_PRE',
+				}),
+				(None, {
+					'mf44_amtime': f'{labeler(i)}_auto_time_PM_PEAK',
+					'mf45_amdist': f'{labeler(i)}_auto_dist_PM_PEAK',
+				}),
+				(None, {
+					'mf44_amtime': f'{labeler(i)}_auto_time_PM_POST',
+					'mf45_amdist': f'{labeler(i)}_auto_dist_PM_POST',
+				}),
+				(None, {
+					'mf46_mdtime': f'{labeler(i)}_auto_time_MIDDAY',
+					'mf47_mddist': f'{labeler(i)}_auto_dist_MIDDAY',
+				}),
+				(None, {
+					'mf46_mdtime': f'{labeler(i)}_auto_time_NIGHT',
+					'mf47_mddist': f'{labeler(i)}_auto_dist_NIGHT',
+				}),
+			),
 		)
 		# Add taxi and TNC wait time data
 		taxi_wait_pk = m01['taxi_wait_pk']
@@ -179,24 +223,24 @@ def sample_dest_zones_and_data(
 			'o_zone',
 			labeler(i),
 			skims.transit_pk.raw,
-			{
-				"in_peak": {
+			(
+				("in_peak", {
 					skims.transit_pk.col_mapping[j]: f'{labeler(i)}_transit_{j}'
 					for j in skim_tags
-				},
-			},
+				}),
+			),
 		)
 		trip_alt_dest_df = attach_selected_skims(
 			trip_alt_dest_df,
 			'o_zone',
 			labeler(i),
 			skims.transit_op.raw,
-			{
-				"~in_peak": {
+			(
+				("~in_peak", {
 					skims.transit_op.col_mapping[j]: f'{labeler(i)}_transit_{j}'
 					for j in skim_tags
-				},
-			},
+				}),
+			),
 		)
 		# clipping to set invalid skim values to NaN?, facilitates more useful statistics.
 		log.debug(f"clipping to set invalid skim values to NaN <{i}>")
