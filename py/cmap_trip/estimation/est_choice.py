@@ -30,7 +30,9 @@ from .est_config import mode_modeled
 from .est_survey import trips
 from .est_sample_dest import sample_dest_zones_and_data
 from ..util import resource_usage
+from ..timeperiods import timeperiod_names
 
+n_timeperiods = len(timeperiod_names)
 
 
 L(
@@ -115,6 +117,7 @@ trips['tnc_pool_cost'] = tnc_pool_cost(
 	trips['in_peak'],
 )
 
+trips['mode_and_time'] = trips.mode5code + trips.timeperiod*5
 
 L("## sample_dest_zones_and_data ##")
 trip_alt_df = sample_dest_zones_and_data(
@@ -146,15 +149,17 @@ trip_alt_df = sample_dest_zones_and_data(
 		'tnc_solo_cost',
 		'tnc_pool_cost',
 		'hhinc_dollars',
+		'timeperiod',
+		'mode_and_time',
 	]
 )
-
-display(HTML(f"<h4>auto_dist statistics</h4>"))
-display(trip_alt_df['auto_dist'].statistics())
-
-display(HTML(f"<h4>altdest0001_auto_dist statistics</h4>"))
-display(trip_alt_df['altdest0001_auto_dist'].statistics())
-
+#
+# display(HTML(f"<h4>auto_dist statistics</h4>"))
+# display(trip_alt_df['auto_dist'].statistics())
+#
+# display(HTML(f"<h4>altdest0001_auto_dist statistics</h4>"))
+# display(trip_alt_df['altdest0001_auto_dist'].statistics())
+#
 
 
 L("## invalid_walktime ##")
@@ -186,11 +191,17 @@ for i in range(n_sampled_dests):
 				v[v > 180] = np.nan
 			trip_alt_df.loc[q, f'altdest{i + 1:04d}_transit_approach_{key}'] = v
 
-alt_codes = np.arange(5 * (n_sampled_dests + 1)) + 1
+base_mode_names = list(trips.mode5.cat.categories)
 
-alt_names = base_alt_names = list(trips.mode5.cat.categories)
-for i in range(n_sampled_dests):
-	alt_names.extend(trips.mode5.cat.categories + f"d{i + 1:04d}")
+from ..choice_model import alt_codes_and_names
+
+alt_codes, alt_names = alt_codes_and_names(
+	n_timeperiods=n_timeperiods,
+	n_sampled_dests=n_sampled_dests,
+	modenames=None,
+	include_actual_dest=True,
+)
+
 
 dats = Dict()
 mods = Dict()
@@ -284,7 +295,7 @@ for purpose, purpose_a in purposes:
 		co=_df,
 		alt_codes=alt_codes,
 		alt_names=alt_names,
-		ch='mode5code',
+		ch='mode_and_time',
 		# av=pd.DataFrame({
 		# 	k: _df.eval(v)
 		# 	for k, v in av.items()
@@ -292,7 +303,7 @@ for purpose, purpose_a in purposes:
 	)
 
 	cached_model_file = cached_model_filename(purpose)
-	if os.path.exists(cached_model_file):
+	if os.path.exists(cached_model_file) and False:
 		m = mods[purpose] = larch.Model.load(
 			cached_model_file
 		)
@@ -359,7 +370,7 @@ L("## model parameter estimation ##")
 
 Pr = Dict()
 
-nests_per_dest = 2 # CHANGE ME if/when the number of nests per destination is altered in `model_builder`
+nests_per_dest = 7 # CHANGE ME if/when the number of nests per destination is altered in `model_builder`
 
 for purpose, m in mods.items():
 	m.dataframes.autoscale_weights()
@@ -371,8 +382,9 @@ for purpose, m in mods.items():
 			cached_model_filename(purpose)
 		)
 	_pr = m.probability(return_dataframe='names', include_nests=True)
-	Pr.ByDest[purpose] = _pr.iloc[:,(n_sampled_dests+1)*5+nests_per_dest-1:-1:nests_per_dest]
-	Pr.ByMode[purpose] = _pr.iloc[:,:(n_sampled_dests+1)*5]
+	n_elemental_alts = (n_sampled_dests+1)*5*n_timeperiods
+	Pr.ByDest[purpose] = _pr.iloc[:,n_elemental_alts+nests_per_dest-1:-1:nests_per_dest]
+	Pr.ByMode[purpose] = _pr.iloc[:,:n_elemental_alts]
 
 
 figures = Dict()
@@ -380,7 +392,7 @@ figures = Dict()
 def dest_profiler(
 	purpose,
 ):
-	_offset = (n_sampled_dests + 1) * 5+nests_per_dest-1
+	_offset = (n_sampled_dests + 1) * 5*n_timeperiods+nests_per_dest-1
 	_ch = mods[purpose].dataframes.data_ch_cascade(mods[purpose].graph)\
 		      .iloc[:, _offset:-1:nests_per_dest].stack().values
 	_av = mods[purpose].dataframes.data_av_cascade(mods[purpose].graph)\
@@ -425,16 +437,18 @@ def mode_share_profiler(
 	_pr = Pr.ByMode[purpose].copy()
 	_pr.columns = pd.MultiIndex.from_product([
 		d_codes,
+		timeperiod_names,
 		['AUTO', 'TAXI', 'TNC1', 'TNC2', 'TRANSIT'],
 	])
-	_pr = _pr.stack(0)
+	_pr = _pr.stack([0,2]).sum(1).unstack()
 
 	_ch = mods[purpose].dataframes.data_ch.copy()
 	_ch.columns=pd.MultiIndex.from_product([
 		d_codes,
+		timeperiod_names,
 		['AUTO', 'TAXI', 'TNC1', 'TNC2', 'TRANSIT'],
 	])
-	_ch = _ch.stack(0)
+	_ch = _ch.stack([0,2]).sum(1).unstack()
 
 	figdef = Dict()
 	figdef['auto_dist'].bins = np.logspace(np.log10(1),np.log10(51),10)-1
@@ -477,9 +491,10 @@ def mode_choice_summary(m):
 	ch_av_summary.index = pd.MultiIndex.from_product(
 		[
 			np.arange(n_sampled_dests + 1),
+			timeperiod_names,
 			['AUTO', 'TAXI', 'TNC1', 'TNC2', 'TRANSIT'],
 		],
-		names=['dest', 'mode'],
+		names=['dest', 'timeperiod', 'mode'],
 	)
 	result = ch_av_summary.groupby('mode').sum()
 	display(HTML(f"<h4>{m.title} Mode Choices Summary</h4>"))

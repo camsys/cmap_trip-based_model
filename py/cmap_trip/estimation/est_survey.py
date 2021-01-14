@@ -8,6 +8,7 @@ import numpy as np
 from os.path import join as pj
 from .est_config import mode_modeled, mode_modeled5
 from ..incomes import income_levels_1, income_levels_2
+from ..timeperiods import hours_by_timeperiod
 
 import cmap_trip
 from .est_data import dh
@@ -95,6 +96,8 @@ if trips is None:
 	trips['in_am_peak'] = trips['depHour'].between(6.5,9.5) | trips['arrHour'].between(6.5,9.5)
 	trips['in_pm_peak'] = trips['depHour'].between(14.5,19) | trips['arrHour'].between(14.5,19)
 	trips['in_peak'] = trips['in_am_peak'] | trips['in_pm_peak']
+
+	trips['timeperiod'] = np.floor(trips.depHour).astype(int).map(hours_by_timeperiod)
 
 	hhinc_dollars = trips.hhinc.map(income_levels_1)
 	hhinc_dollars = hhinc_dollars.fillna(trips.hhinc2.map(income_levels_2))
