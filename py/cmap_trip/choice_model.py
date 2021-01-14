@@ -404,9 +404,11 @@ def model_builder(
 	else:
 		m.set_values(**parameter_values)
 
-	# from larch.model.constraints import RatioBound
-	# c1 = RatioBound(P("ovtt"), P("transit_ivtt"), min_ratio=1.5, max_ratio=3.0, scale=1)
-	# c2 = RatioBound(P("Mu-HiredCar"), P("Mu-Dest"), min_ratio=1e-5, max_ratio=1.0, scale=1)
-	# m.constraints = [c1,c2]
+	from larch.model.constraints import RatioBound
+	m.constraints = [
+		RatioBound(P("ovtt"), P("transit_ivtt"), min_ratio=1.5, max_ratio=3.0, scale=1),
+		RatioBound(P("Mu-HiredCar"), P("Mu-Dest"), min_ratio=1e-5, max_ratio=1.0, scale=1),
+		RatioBound(P("Mu-Timeperiod"), P("Mu-HiredCar"), min_ratio=1e-5, max_ratio=1.0, scale=1),
+	]
 
 	return m

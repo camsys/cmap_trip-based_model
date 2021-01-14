@@ -316,7 +316,7 @@ for purpose, purpose_a in purposes:
 		mods_preload[purpose] = False
 	m.dataservice = dfs
 	m.load_data()
-	m.diagnosis = m.doctor(repair_ch_av="-")
+	m.diagnosis = m.doctor(repair_ch_av="-", repair_nan_data_co=True)
 
 
 with open(dh.filenames.choice_model_param_file, 'w', encoding="utf-8") as cmp_yaml:
@@ -482,6 +482,61 @@ def mode_share_profiler(
 		)
 		display(figures.share[purpose][x])
 
+def timeshare_profiler(purpose):
+	d_codes = np.arange(n_sampled_dests + 1)
+
+	_pr = Pr.ByMode[purpose].copy()
+	_pr.columns = pd.MultiIndex.from_product([
+		d_codes,
+		timeperiod_names,
+		['AUTO', 'TAXI', 'TNC1', 'TNC2', 'TRANSIT'],
+	])
+	_pr1 = _pr.stack([1, 2]).sum(1).unstack([1, 2]).sum().unstack().reindex(timeperiod_names)
+
+	_ch = mods[purpose].dataframes.data_ch.copy()
+	_ch.columns = pd.MultiIndex.from_product([
+		d_codes,
+		timeperiod_names,
+		['AUTO', 'TAXI', 'TNC1', 'TNC2', 'TRANSIT'],
+	])
+	_ch1 = _ch.stack([1, 2]).sum(1).unstack([1, 2]).sum().unstack().reindex(timeperiod_names)
+
+	_pr_detail = _pr1.drop(columns=['AUTO'])
+	_pr_gross = pd.DataFrame([
+		_pr1.AUTO, _pr_detail.sum(1).rename("OTHER"),
+	]).T
+
+	_ch_detail = _ch1.drop(columns=['AUTO'])
+	_ch_gross = pd.DataFrame([
+		_ch1.AUTO, _ch_detail.sum(1).rename("OTHER"),
+	]).T
+
+	from matplotlib import pyplot as plt
+	fig, axs = plt.subplots(
+		2, 2,
+		figsize=(12, 10),
+		sharey='row', sharex='col',
+		gridspec_kw={'wspace': 0.1, 'hspace': 0.1}
+	)
+	_ch_gross.plot(kind='bar', stacked=True, ax=axs[0][1])
+	_pr_gross.plot(kind='bar', stacked=True, ax=axs[0][0])
+	_ch_detail.plot(kind='bar', stacked=True, ax=axs[1][1])
+	_pr_detail.plot(kind='bar', stacked=True, ax=axs[1][0])
+	axs[0][0].set_title("Modeled Time Periods")
+	axs[0][1].set_title("Observed Time Periods")
+	axs[0][0].set_ylabel("Relative Frequency")
+	axs[1][0].set_ylabel("Relative Frequency")
+	axs[0][0].set_yticks([])
+	axs[1][0].set_yticks([])
+
+	from larch.util.png import make_png
+	result = make_png(fig)
+	fig.clf()
+	plt.close(fig)
+
+	figures.timeshare[purpose] = result
+	display(result)
+
 
 def mode_choice_summary(m):
 	ch_av_summary = m.dataframes.choice_avail_summary().iloc[:-1]
@@ -535,6 +590,14 @@ for purpose, m in mods.items():
 	else:
 		mode_share_profiler_success = True
 
+	try:
+		timeshare_profiler(purpose)
+	except:
+		log.exception("exception in timeshare_profiler")
+		time_share_profiler_success = False
+	else:
+		time_share_profiler_success = True
+
 	xl = m.to_xlsx(
 		cached_model_filereport(purpose),
 		save_now=False
@@ -555,6 +618,12 @@ for purpose, m in mods.items():
 			figures.share[purpose]['auto_dist'],
 			sheetname="Figures",
 			heading="Mode Choice by Distance",
+		)
+	if time_share_profiler_success:
+		xl.add_content_tab(
+			figures.timeshare[purpose],
+			sheetname="Figures",
+			heading="Mode Choice by Time of Day",
 		)
 	xl.save()
 
