@@ -161,12 +161,14 @@ def model_builder(
 		parameter_values=None,
 		auto_cost_per_mile=30, # cents
 ):
+	log.debug(f"model_builder({purpose}, n_sampled_dests={n_sampled_dests})")
+
 	n_timeperiods = 8
 	n_modes = 5 # len(mode5names)
 
 	alt_codes, alt_names = alt_codes_and_names(
-		n_timeperiods=8,
-		n_sampled_dests=5,
+		n_timeperiods=n_timeperiods,
+		n_sampled_dests=n_sampled_dests,
 		modenames=mode5names,
 		include_actual_dest=include_actual_dest,
 	)

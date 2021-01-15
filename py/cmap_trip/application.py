@@ -8,7 +8,7 @@ from addict import Dict
 
 from .tnc_costs import taxi_cost, tnc_solo_cost, tnc_pool_cost
 from .transit_approach import transit_approach
-from .choice_model import model_builder
+from .choice_model import model_builder, alt_codes_and_names
 from .random_states import check_random_state
 from .data_handlers import DataHandler
 from .timeperiods import timeperiod_names
@@ -17,6 +17,7 @@ from .cmap_logging import getLogger
 log = getLogger()
 
 mode5codes = Dict({'AUTO': 1, 'TAXI': 2, 'TNC1': 3, 'TNC2': 4, 'TRANSIT': 5})
+n_timeperiods = len(timeperiod_names)
 
 av = {}
 
@@ -39,16 +40,17 @@ def _data_for_application_1(dh, otaz=1, peak=True, purpose='HBWH', replication=N
 	global av
 
 	n_zones = dh.n_internal_zones
-	if len(av) != n_zones * 5:
+	if len(av) != n_zones * 5 * n_timeperiods:
 		av = {}
 		num = 5
-		for i in range(n_zones): # TODO iterate over time periods
-			av[num + mode5codes.AUTO] = f"altdest{i + 1:04d}_auto_avail"
-			av[num + mode5codes.TNC1] = f"altdest{i + 1:04d}_auto_avail"
-			av[num + mode5codes.TNC2] = f"altdest{i + 1:04d}_auto_avail"
-			av[num + mode5codes.TAXI] = f"altdest{i + 1:04d}_auto_avail"
-			av[num + mode5codes.TRANSIT] = f"altdest{i + 1:04d}_transit_avail" # TODO time periods
-			num += 5
+		for i in range(n_zones):
+			for t in range(n_timeperiods):
+				av[num + mode5codes.AUTO] = f"altdest{i + 1:04d}_auto_avail"
+				av[num + mode5codes.TNC1] = f"altdest{i + 1:04d}_auto_avail"
+				av[num + mode5codes.TNC2] = f"altdest{i + 1:04d}_auto_avail"
+				av[num + mode5codes.TAXI] = f"altdest{i + 1:04d}_auto_avail"
+				av[num + mode5codes.TRANSIT] = f"altdest{i + 1:04d}_transit_avail_{timeperiod_names[t]}"
+				num += 5
 
 	if replication is None:
 		replication = dh.cfg.get('n_replications', 50)
@@ -117,6 +119,10 @@ def _data_for_application_1(dh, otaz=1, peak=True, purpose='HBWH', replication=N
 	# 	df1['auto_dist'] = dh.skims.auto.raw[dh.skims.auto.col_mapping['md_dist']][otaz - 1, :n_zones]
 	# 	tskims = dh.skims.transit_op
 
+	df1[f'piece(auto_dist,None,5)'] = piece(df1[f'auto_dist_MIDDAY'], None, 5)
+	df1[f'piece(auto_dist,5,10)'] = piece(df1[f'auto_dist_MIDDAY'], 5, 10)
+	df1[f'piece(auto_dist,10,None)'] = piece(df1[f'auto_dist_MIDDAY'], 10, None)
+
 	for t in timeperiod_names:
 		df1[f'piece(auto_dist_{t},None,5)'] = piece(df1[f'auto_dist_{t}'],None,5)
 		df1[f'piece(auto_dist_{t},5,10)'] = piece(df1[f'auto_dist_{t}'],5,10)
@@ -144,6 +150,11 @@ def _data_for_application_1(dh, otaz=1, peak=True, purpose='HBWH', replication=N
 			df1[f'tnc_pool_wait_time_{t}'] = dh.m01['tnc_pool_wait_op'][otaz]
 			df1[f'taxi_wait_time_{t}'] = dh.m01['taxi_wait_op'][otaz]
 
+	# TODO peak and offpeak wait times
+	df1[f'taxi_wait_time'] = df1[f'taxi_wait_time_MIDDAY']
+	df1[f'tnc_solo_wait_time'] = df1[f'tnc_solo_wait_time_MIDDAY']
+	df1[f'tnc_pool_wait_time'] = df1[f'tnc_pool_wait_time_MIDDAY']
+
 	df2 = pd.concat([df1.drop(columns=['otaz'])] * replication)
 
 	# transit approach
@@ -163,15 +174,29 @@ def _data_for_application_1(dh, otaz=1, peak=True, purpose='HBWH', replication=N
 	df2['transit_approach_walktime'] = trapp['walktime'].T.reshape(-1)
 	df2['transit_approach_cost'] = trapp['cost'].T.reshape(-1)
 
+	# TODO fix auto parking cost
+	# _parking_cost, _free_parking = parking_cost_v2(
+	# 	dh,
+	# 	_trips_by_purpose.d_zone,
+	# 	_trips_by_purpose.hhinc_dollars,
+	# 	cfg.default_activity_durations[purpose],
+	# 	purpose,
+	# 	random_state=hash(purpose) + 1,
+	# )
+	# trips.loc[q, f'actualdest_auto_parking_cost'] = _parking_cost
+	# trips.loc[q, f'actualdest_auto_parking_free'] = _free_parking
+	df2['auto_parking_cost'] = 0.0
+
 	df2['samp_wgt'] = 1.0
 	df2['log(1/samp_wgt)'] = 0.0
 
-	df2['transit_avail'] = (
-		(df2['transit_ivtt'] < 999)
-		& (df2['transit_approach_walktime'] < 999)
-		& (df2['transit_approach_drivetime'] < 999)
-		& (df2['attractions'] > 1e-290)
-	)
+	for t in timeperiod_names:
+		df2[f'transit_avail_{t}'] = (
+			(df2[f'transit_ivtt_{t}'] < 999)
+			& (df2['transit_approach_walktime'] < 999)
+			& (df2['transit_approach_drivetime'] < 999)
+			& (df2['attractions'] > 1e-290)
+		)
 	df2['auto_avail'] = (
 		df2['attractions'] > 1e-290
 	)
@@ -209,7 +234,12 @@ def _data_for_application_2(dh, df2):
 	df2.columns = columns
 
 	n_zones = dh.n_internal_zones
-	alt_codes = np.arange(1, n_zones * 5 + 1) + 5
+
+	alt_codes, alt_names = alt_codes_and_names(
+		n_timeperiods=8,
+		n_sampled_dests=n_zones,
+		include_actual_dest=False,
+	)
 
 	dfas = larch.DataFrames(
 		co=df2.astype(np.float64),
@@ -285,8 +315,10 @@ def choice_simulator_prob(dh, purpose, otaz):
 	-------
 
 	"""
+	log.debug("choice_simulator_prob.data_for_application")
 	dfa = data_for_application(dh, otaz=otaz, peak=('HBW' in purpose))
 
+	log.debug("choice_simulator_prob.settings")
 	auto_cost_per_mile = dh.cfg.auto.cost.per_mile
 	n_sampled_dests = dh.n_internal_zones
 	choice_model_params = dh.choice_model_params
@@ -306,11 +338,14 @@ def choice_simulator_prob(dh, purpose, otaz):
 		choice_simulator_global[(auto_cost_per_mile, n_sampled_dests)] = choice_simulator
 
 	sim = choice_simulator[purpose]
+	log.debug("choice_simulator_prob.attach dataframes")
 	if sim.dataframes is None:
 		sim.dataframes = dfa
 	else:
 		sim.set_dataframes(dfa, False)
+	log.debug("choice_simulator_prob.simulate probability")
 	sim_pr = sim.probability()
+	log.debug("choice_simulator_prob.blockwise_mean")
 	sim_pr = blockwise_mean(sim_pr, replication)
 	return sim_pr #.reshape([sim_pr.shape[0],-1,5])
 

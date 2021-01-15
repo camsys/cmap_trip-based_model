@@ -17,6 +17,9 @@ sim_trips = choice_simulator_trips(
 )
 
 
+import os
+os.makedirs("/tmp/cmap-log", exist_ok=True)
+
 L("#### Multiprocess application test ####")
 sim_trips5 = choice_simulator_trips_many(
     dh,
