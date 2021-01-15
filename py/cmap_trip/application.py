@@ -11,6 +11,7 @@ from .transit_approach import transit_approach
 from .choice_model import model_builder
 from .random_states import check_random_state
 from .data_handlers import DataHandler
+from .timeperiods import timeperiod_names
 
 from .cmap_logging import getLogger
 log = getLogger()
@@ -41,12 +42,12 @@ def _data_for_application_1(dh, otaz=1, peak=True, purpose='HBWH', replication=N
 	if len(av) != n_zones * 5:
 		av = {}
 		num = 5
-		for i in range(n_zones):
+		for i in range(n_zones): # TODO iterate over time periods
 			av[num + mode5codes.AUTO] = f"altdest{i + 1:04d}_auto_avail"
 			av[num + mode5codes.TNC1] = f"altdest{i + 1:04d}_auto_avail"
 			av[num + mode5codes.TNC2] = f"altdest{i + 1:04d}_auto_avail"
 			av[num + mode5codes.TAXI] = f"altdest{i + 1:04d}_auto_avail"
-			av[num + mode5codes.TRANSIT] = f"altdest{i + 1:04d}_transit_avail"
+			av[num + mode5codes.TRANSIT] = f"altdest{i + 1:04d}_transit_avail" # TODO time periods
 			num += 5
 
 	if replication is None:
@@ -67,40 +68,81 @@ def _data_for_application_1(dh, otaz=1, peak=True, purpose='HBWH', replication=N
 
 	df1['o_zone == dtaz'] = (otaz == df1['dtaz'])
 
-	if peak:
-		df1['auto_time'] = dh.skims.auto.raw[dh.skims.auto.col_mapping['am_time']][otaz - 1, :n_zones]
-		df1['auto_dist'] = dh.skims.auto.raw[dh.skims.auto.col_mapping['am_dist']][otaz - 1, :n_zones]
-		tskims = dh.skims.transit_pk
-	else:
-		df1['auto_time'] = dh.skims.auto.raw[dh.skims.auto.col_mapping['md_time']][otaz - 1, :n_zones]
-		df1['auto_dist'] = dh.skims.auto.raw[dh.skims.auto.col_mapping['md_dist']][otaz - 1, :n_zones]
-		tskims = dh.skims.transit_op
+	df1['auto_time_NIGHT'  ] = dh.skims.auto.raw[dh.skims.auto.col_mapping['md_time']][otaz - 1, :n_zones]
+	df1['auto_time_AM_PRE' ] = dh.skims.auto.raw[dh.skims.auto.col_mapping['am_time']][otaz - 1, :n_zones]
+	df1['auto_time_AM_PEAK'] = dh.skims.auto.raw[dh.skims.auto.col_mapping['am_time']][otaz - 1, :n_zones]
+	df1['auto_time_AM_POST'] = dh.skims.auto.raw[dh.skims.auto.col_mapping['am_time']][otaz - 1, :n_zones]
+	df1['auto_time_MIDDAY' ] = dh.skims.auto.raw[dh.skims.auto.col_mapping['md_time']][otaz - 1, :n_zones]
+	df1['auto_time_PM_PRE' ] = dh.skims.auto.raw[dh.skims.auto.col_mapping['am_time']][otaz - 1, :n_zones]
+	df1['auto_time_PM_PEAK'] = dh.skims.auto.raw[dh.skims.auto.col_mapping['am_time']][otaz - 1, :n_zones]
+	df1['auto_time_PM_POST'] = dh.skims.auto.raw[dh.skims.auto.col_mapping['am_time']][otaz - 1, :n_zones]
 
-	df1['piece(auto_dist,None,5)'] = piece(df1['auto_dist'],None,5)
-	df1['piece(auto_dist,5,10)'] = piece(df1['auto_dist'],5,10)
-	df1['piece(auto_dist,10,None)'] = piece(df1['auto_dist'],10,None)
+	df1['auto_dist_NIGHT'  ] = dh.skims.auto.raw[dh.skims.auto.col_mapping['md_dist']][otaz - 1, :n_zones]
+	df1['auto_dist_AM_PRE' ] = dh.skims.auto.raw[dh.skims.auto.col_mapping['am_dist']][otaz - 1, :n_zones]
+	df1['auto_dist_AM_PEAK'] = dh.skims.auto.raw[dh.skims.auto.col_mapping['am_dist']][otaz - 1, :n_zones]
+	df1['auto_dist_AM_POST'] = dh.skims.auto.raw[dh.skims.auto.col_mapping['am_dist']][otaz - 1, :n_zones]
+	df1['auto_dist_MIDDAY' ] = dh.skims.auto.raw[dh.skims.auto.col_mapping['md_dist']][otaz - 1, :n_zones]
+	df1['auto_dist_PM_PRE' ] = dh.skims.auto.raw[dh.skims.auto.col_mapping['am_dist']][otaz - 1, :n_zones]
+	df1['auto_dist_PM_PEAK'] = dh.skims.auto.raw[dh.skims.auto.col_mapping['am_dist']][otaz - 1, :n_zones]
+	df1['auto_dist_PM_POST'] = dh.skims.auto.raw[dh.skims.auto.col_mapping['am_dist']][otaz - 1, :n_zones]
 
-	df1['transit_ivtt'] = tskims.raw[tskims.col_mapping['ivtt']][otaz - 1, :n_zones]
-	df1['transit_ovtt'] = tskims.raw[tskims.col_mapping['ovtt']][otaz - 1, :n_zones]
-	df1['transit_fare'] = tskims.raw[tskims.col_mapping['fare']][otaz - 1, :n_zones]
+	tskims = {
+		'NIGHT'  :dh.skims.transit_op,
+		'AM_PRE' :dh.skims.transit_pk,
+		'AM_PEAK':dh.skims.transit_pk,
+		'AM_POST':dh.skims.transit_pk,
+		'MIDDAY' :dh.skims.transit_op,
+		'PM_PRE' :dh.skims.transit_pk,
+		'PM_PEAK':dh.skims.transit_pk,
+		'PM_POST':dh.skims.transit_pk,
+	}
 
-	df1['taxi_fare'] = taxi_cost(
-		dh, df1['auto_time'], df1['auto_dist'], df1['otaz'], df1['dtaz'],
-	)
-	df1['tnc_solo_fare'] = tnc_solo_cost(
-		dh, df1['auto_time'], df1['auto_dist'], df1['otaz'], df1['dtaz'], peak,
-	)
-	df1['tnc_pool_fare'] = tnc_pool_cost(
-		dh, df1['auto_time'], df1['auto_dist'], df1['otaz'], df1['dtaz'], peak,
-	)
-	if peak:
-		df1['tnc_solo_wait_time'] = dh.m01['tnc_solo_wait_pk'][otaz]
-		df1['tnc_pool_wait_time'] = dh.m01['tnc_pool_wait_pk'][otaz]
-		df1['taxi_wait_time'] = dh.m01['taxi_wait_pk'][otaz]
-	else:
-		df1['tnc_solo_wait_time'] = dh.m01['tnc_solo_wait_op'][otaz]
-		df1['tnc_pool_wait_time'] = dh.m01['tnc_pool_wait_op'][otaz]
-		df1['taxi_wait_time'] = dh.m01['taxi_wait_op'][otaz]
+	peak_tnc_pricing = {
+		'NIGHT'  : 0,
+		'AM_PRE' : 1,
+		'AM_PEAK': 1,
+		'AM_POST': 1,
+		'MIDDAY' : 0,
+		'PM_PRE' : 1,
+		'PM_PEAK': 1,
+		'PM_POST': 1,
+	}
+
+	# if peak:
+	# 	df1['auto_time'] = dh.skims.auto.raw[dh.skims.auto.col_mapping['am_time']][otaz - 1, :n_zones]
+	# 	df1['auto_dist'] = dh.skims.auto.raw[dh.skims.auto.col_mapping['am_dist']][otaz - 1, :n_zones]
+	# 	tskims = dh.skims.transit_pk
+	# else:
+	# 	df1['auto_time'] = dh.skims.auto.raw[dh.skims.auto.col_mapping['md_time']][otaz - 1, :n_zones]
+	# 	df1['auto_dist'] = dh.skims.auto.raw[dh.skims.auto.col_mapping['md_dist']][otaz - 1, :n_zones]
+	# 	tskims = dh.skims.transit_op
+
+	for t in timeperiod_names:
+		df1[f'piece(auto_dist_{t},None,5)'] = piece(df1[f'auto_dist_{t}'],None,5)
+		df1[f'piece(auto_dist_{t},5,10)'] = piece(df1[f'auto_dist_{t}'],5,10)
+		df1[f'piece(auto_dist_{t},10,None)'] = piece(df1[f'auto_dist_{t}'],10,None)
+
+		df1[f'transit_ivtt_{t}'] = tskims[t].raw[tskims[t].col_mapping['ivtt']][otaz - 1, :n_zones]
+		df1[f'transit_ovtt_{t}'] = tskims[t].raw[tskims[t].col_mapping['ovtt']][otaz - 1, :n_zones]
+		df1[f'transit_fare_{t}'] = tskims[t].raw[tskims[t].col_mapping['fare']][otaz - 1, :n_zones]
+
+		df1[f'taxi_fare_{t}'] = taxi_cost(
+			dh, df1[f'auto_time_{t}'], df1[f'auto_dist_{t}'], df1['otaz'], df1['dtaz'],
+		)
+		df1[f'tnc_solo_fare_{t}'] = tnc_solo_cost(
+			dh, df1[f'auto_time_{t}'], df1[f'auto_dist_{t}'], df1['otaz'], df1['dtaz'], peak_tnc_pricing[t],
+		)
+		df1[f'tnc_pool_fare_{t}'] = tnc_pool_cost(
+			dh, df1[f'auto_time_{t}'], df1[f'auto_dist_{t}'], df1['otaz'], df1['dtaz'], peak_tnc_pricing[t],
+		)
+		if peak_tnc_pricing[t]:
+			df1[f'tnc_solo_wait_time_{t}'] = dh.m01['tnc_solo_wait_pk'][otaz]
+			df1[f'tnc_pool_wait_time_{t}'] = dh.m01['tnc_pool_wait_pk'][otaz]
+			df1[f'taxi_wait_time_{t}'] = dh.m01['taxi_wait_pk'][otaz]
+		else:
+			df1[f'tnc_solo_wait_time_{t}'] = dh.m01['tnc_solo_wait_op'][otaz]
+			df1[f'tnc_pool_wait_time_{t}'] = dh.m01['tnc_pool_wait_op'][otaz]
+			df1[f'taxi_wait_time_{t}'] = dh.m01['taxi_wait_op'][otaz]
 
 	df2 = pd.concat([df1.drop(columns=['otaz'])] * replication)
 

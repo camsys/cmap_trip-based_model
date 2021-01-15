@@ -6,8 +6,9 @@ from .est_data import dh
 skims = dh.skims
 zone_shp = dh.zone_shp
 m01 = dh.m01
-from ..tnc_costs import taxi_cost, tnc_solo_cost, tnc_pool_cost
+from ..tnc_costs import taxi_cost, tnc_solo_cost, tnc_pool_cost, peak_tnc_pricing
 from ..timeperiods import timeperiod_names
+
 
 log = cmap_trip.log_to_stderr(level=10)
 
@@ -191,29 +192,30 @@ def sample_dest_zones_and_data(
 				+ origin_zone.map(tnc_pool_wait_op) * ~trips.in_peak
 		)
 		# Add taxi and TNC fare data
-		trip_alt_dest_df[f'{labeler(i)}_taxi_fare'] = taxi_cost(
-			dh,
-			trip_alt_dest_df[f'{labeler(i)}_auto_time'],
-			trip_alt_dest_df[f'{labeler(i)}_auto_dist'],
-			origin_zone,
-			destin_zone,
-		)
-		trip_alt_dest_df[f'{labeler(i)}_tnc_solo_fare'] = tnc_solo_cost(
-			dh,
-			trip_alt_dest_df[f'{labeler(i)}_auto_time'],
-			trip_alt_dest_df[f'{labeler(i)}_auto_dist'],
-			origin_zone,
-			destin_zone,
-			trip_alt_dest_df['in_peak'],
-		)
-		trip_alt_dest_df[f'{labeler(i)}_tnc_pool_fare'] = tnc_pool_cost(
-			dh,
-			trip_alt_dest_df[f'{labeler(i)}_auto_time'],
-			trip_alt_dest_df[f'{labeler(i)}_auto_dist'],
-			origin_zone,
-			destin_zone,
-			trip_alt_dest_df['in_peak'],
-		)
+		for t in timeperiod_names:
+			trip_alt_dest_df[f'{labeler(i)}_taxi_fare_{t}'] = taxi_cost(
+				dh,
+				trip_alt_dest_df[f'{labeler(i)}_auto_time_{t}'],
+				trip_alt_dest_df[f'{labeler(i)}_auto_dist_{t}'],
+				origin_zone,
+				destin_zone,
+			)
+			trip_alt_dest_df[f'{labeler(i)}_tnc_solo_fare_{t}'] = tnc_solo_cost(
+				dh,
+				trip_alt_dest_df[f'{labeler(i)}_auto_time_{t}'],
+				trip_alt_dest_df[f'{labeler(i)}_auto_dist_{t}'],
+				origin_zone,
+				destin_zone,
+				peak_tnc_pricing[t],
+			)
+			trip_alt_dest_df[f'{labeler(i)}_tnc_pool_fare_{t}'] = tnc_pool_cost(
+				dh,
+				trip_alt_dest_df[f'{labeler(i)}_auto_time_{t}'],
+				trip_alt_dest_df[f'{labeler(i)}_auto_dist_{t}'],
+				origin_zone,
+				destin_zone,
+				peak_tnc_pricing[t],
+			)
 
 		# attach transit skims
 		log.debug(f"attach transit skims <{i}>")
@@ -228,6 +230,30 @@ def sample_dest_zones_and_data(
 					skims.transit_pk.col_mapping[j]: f'{labeler(i)}_transit_{j}'
 					for j in skim_tags
 				}),
+				(None, {
+					skims.transit_pk.col_mapping[j]: f'{labeler(i)}_transit_{j}_AM_PRE'
+					for j in skim_tags
+				}),
+				(None, {
+					skims.transit_pk.col_mapping[j]: f'{labeler(i)}_transit_{j}_AM_PEAK'
+					for j in skim_tags
+				}),
+				(None, {
+					skims.transit_pk.col_mapping[j]: f'{labeler(i)}_transit_{j}_AM_POST'
+					for j in skim_tags
+				}),
+				(None, {
+					skims.transit_pk.col_mapping[j]: f'{labeler(i)}_transit_{j}_PM_PRE'
+					for j in skim_tags
+				}),
+				(None, {
+					skims.transit_pk.col_mapping[j]: f'{labeler(i)}_transit_{j}_PM_PEAK'
+					for j in skim_tags
+				}),
+				(None, {
+					skims.transit_pk.col_mapping[j]: f'{labeler(i)}_transit_{j}_PM_POST'
+					for j in skim_tags
+				}),
 			),
 		)
 		trip_alt_dest_df = attach_selected_skims(
@@ -240,6 +266,14 @@ def sample_dest_zones_and_data(
 					skims.transit_op.col_mapping[j]: f'{labeler(i)}_transit_{j}'
 					for j in skim_tags
 				}),
+				(None, {
+					skims.transit_op.col_mapping[j]: f'{labeler(i)}_transit_{j}_MIDDAY'
+					for j in skim_tags
+				}),
+				(None, {
+					skims.transit_op.col_mapping[j]: f'{labeler(i)}_transit_{j}_NIGHT'
+					for j in skim_tags
+				}),
 			),
 		)
 		# clipping to set invalid skim values to NaN?, facilitates more useful statistics.
@@ -247,6 +281,10 @@ def sample_dest_zones_and_data(
 		for j in ['ivtt', 'ovtt', 'headway', 'fare']:
 			x = trip_alt_dest_df[f'{labeler(i)}_transit_{j}']
 			trip_alt_dest_df.loc[x>999, f'{labeler(i)}_transit_{j}'] = np.nan
+			for t in timeperiod_names:
+				varname = f'{labeler(i)}_transit_{j}_{t}'
+				x = trip_alt_dest_df[varname]
+				trip_alt_dest_df.loc[x > 999, varname] = np.nan
 
 		# parking costs
 		from ..parking_costs import parking_cost_v2

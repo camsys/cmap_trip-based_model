@@ -86,42 +86,43 @@ def model_utility_for_dest(
 			+ piecewise_linear(f"{dest_label}_auto_dist", "distance", breaks=[5, 10])
 	)
 	for t in range(n_timeperiods):
+		tname = timeperiod_names[t]
 		shift = (t * n_modes) + ((dest_number+1) * alts_per_dest)
 		jAUTO = mode5codes.AUTO + shift
 		jTNC1 = mode5codes.TNC1 + shift
 		jTNC2 = mode5codes.TNC2 + shift
 		jTAXI = mode5codes.TAXI + shift
 		jTRANSIT = mode5codes.TRANSIT + shift
-		utility_timeperiod = P(f"Time-{timeperiod_names[t]}") if t != 4 else ()
+		utility_timeperiod = P(f"Time-{tname}") if t != 4 else ()
 		m.utility_co[jAUTO] = (
-				+ P("cost") * X(f"{dest_label}_auto_dist_{timeperiod_names[t]}") * auto_cost_per_mile / 100.0
-				+ P("auto_time") * X(f"{dest_label}_auto_time_{timeperiod_names[t]}")
+				+ P("cost") * X(f"{dest_label}_auto_dist_{tname}") * auto_cost_per_mile / 100.0
+				+ P("auto_time") * X(f"{dest_label}_auto_time_{tname}")
 				+ P("cost") * X(f"{dest_label}_auto_parking_cost")
 				# TODO add walk terminal time cost
 			) + utility_destination + utility_timeperiod
 		m.utility_co[jTNC1] = (
 				P.Const_TNC1
-				+ P("cost") * X(f"{dest_label}_tnc_solo_fare") / 100.0
+				+ P("cost") * X(f"{dest_label}_tnc_solo_fare_{tname}") / 100.0
 				+ P("ovtt") * X(f"{dest_label}_tnc_solo_wait_time")
-				+ P("tnc_time") * X(f"{dest_label}_auto_time_{timeperiod_names[t]}")
+				+ P("tnc_time") * X(f"{dest_label}_auto_time_{tname}")
 			) + utility_destination + utility_timeperiod
 		m.utility_co[jTNC2] = (
 				P.Const_TNC2
-				+ P("cost") * X(f"{dest_label}_tnc_pool_fare") / 100.0
+				+ P("cost") * X(f"{dest_label}_tnc_pool_fare_{tname}") / 100.0
 				+ P("ovtt") * X(f"{dest_label}_tnc_pool_wait_time")
-				+ P("tnc_time") * X(f"{dest_label}_auto_time_{timeperiod_names[t]}")
+				+ P("tnc_time") * X(f"{dest_label}_auto_time_{tname}")
 			) + utility_destination + utility_timeperiod
 		m.utility_co[jTAXI] = (
 				P.Const_TAXI
-				+ P("cost") * X(f"{dest_label}_taxi_fare") / 100.0
+				+ P("cost") * X(f"{dest_label}_taxi_fare_{tname}") / 100.0
 				+ P("ovtt") * X(f"{dest_label}_taxi_wait_time")
-				+ P("tnc_time") * X(f"{dest_label}_auto_time_{timeperiod_names[t]}")
+				+ P("tnc_time") * X(f"{dest_label}_auto_time_{tname}")
 			) + utility_destination + utility_timeperiod
 		m.utility_co[jTRANSIT] = (
 				P.Const_Transit
-				+ P("cost") * X(f"{dest_label}_transit_fare") / 100.0
-				+ P("transit_ivtt") * X(f"{dest_label}_transit_ivtt")
-				+ P("ovtt") * X(f"{dest_label}_transit_ovtt")
+				+ P("cost") * X(f"{dest_label}_transit_fare_{tname}") / 100.0
+				+ P("transit_ivtt") * X(f"{dest_label}_transit_ivtt_{tname}")
+				+ P("ovtt") * X(f"{dest_label}_transit_ovtt_{tname}")
 				+ P("cost") * X(f"{dest_label}_transit_approach_cost") / 100.0
 				+ P("transit_ivtt") * X(f"{dest_label}_transit_approach_drivetime")
 				+ P("ovtt") * X(f"{dest_label}_transit_approach_walktime")
@@ -186,9 +187,9 @@ def model_builder(
 			av[mode5codes.TNC2+tshift] = dzone_has_nonzero_attractions
 			av[mode5codes.TAXI+tshift] = dzone_has_nonzero_attractions
 			av[mode5codes.TRANSIT+tshift] = (
-				f"(transit_ivtt < 999) "
-				f"& (transit_approach_walktime < 999) "
-				f"& (transit_approach_drivetime < 999) "
+				f"(actualdest_transit_ivtt_{timeperiod_names[t]} < 999) "
+				f"& (actualdest_transit_approach_walktime < 999) "
+				f"& (actualdest_transit_approach_drivetime < 999) "
 				f"& ({dzone_has_nonzero_attractions})"
 			)
 	num = n_modes*n_timeperiods
@@ -200,7 +201,7 @@ def model_builder(
 			av[num + mode5codes.TNC1+tshift] = altdest_has_nonzero_attractions
 			av[num + mode5codes.TNC2+tshift] = altdest_has_nonzero_attractions
 			av[num + mode5codes.TAXI+tshift] = altdest_has_nonzero_attractions
-			av[num + mode5codes.TRANSIT+tshift] = f"altdest{i + 1:04d}_transit_avail"
+			av[num + mode5codes.TRANSIT+tshift] = f"altdest{i + 1:04d}_transit_avail_{timeperiod_names[t]}"
 		num += n_modes*n_timeperiods
 
 

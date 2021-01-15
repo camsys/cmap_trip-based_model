@@ -1,6 +1,17 @@
 import numpy as np
 import pandas as pd
 
+peak_tnc_pricing = {
+	'NIGHT': 0,
+	'AM_PRE': 1,
+	'AM_PEAK': 1,
+	'AM_POST': 1,
+	'MIDDAY': 0,
+	'PM_PRE': 1,
+	'PM_PEAK': 1,
+	'PM_POST': 1,
+}
+
 
 def taxi_cost(dh, auto_time, auto_dist, o_zone, d_zone):
 	"""

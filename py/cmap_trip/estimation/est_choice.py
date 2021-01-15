@@ -59,135 +59,86 @@ L("## ae_approach_los ##")
 from .est_survey import ae_approach_los
 
 trip_approach_distances, ae_los = ae_approach_los(trips)
-#
-# flipY = trips.paFlip
-# flipN = 1 - trips.paFlip
-#
-# trips_origin = trips.o_zone * flipN + trips.d_zone * flipY
-#
-# taxi_wait_pk = dh.m01['taxi_wait_pk']
-# taxi_wait_op = dh.m01['taxi_wait_op']
-# trips['taxi_wait_time'] = (
-# 		trips_origin.map(taxi_wait_pk) * trips.in_peak
-# 		+ trips_origin.map(taxi_wait_op) * ~trips.in_peak
-# )
-#
-# tnc_solo_wait_pk = dh.m01['tnc_solo_wait_pk']
-# tnc_solo_wait_op = dh.m01['tnc_solo_wait_op']
-# trips['tnc_solo_wait_time'] = (
-# 		trips_origin.map(tnc_solo_wait_pk) * trips.in_peak
-# 		+ trips_origin.map(tnc_solo_wait_op) * ~trips.in_peak
-# )
-#
-# tnc_pool_wait_pk = dh.m01['tnc_pool_wait_pk']
-# tnc_pool_wait_op = dh.m01['tnc_pool_wait_op']
-# trips['tnc_pool_wait_time'] = (
-# 		trips_origin.map(tnc_pool_wait_pk) * trips.in_peak
-# 		+ trips_origin.map(tnc_pool_wait_op) * ~trips.in_peak
-# )
-#
-# from ..tnc_costs import tnc_solo_cost, taxi_cost, tnc_pool_cost
-#
-# trips['taxi_fare'] = taxi_cost(
-# 	dh,
-# 	trips['auto_time'],
-# 	trips['auto_dist'],
-# 	trips['o_zone'],
-# 	trips['d_zone'],
-# )
-#
-# trips['tnc_solo_cost'] = tnc_solo_cost(
-# 	dh,
-# 	trips['auto_time'],
-# 	trips['auto_dist'],
-# 	trips['o_zone'],
-# 	trips['d_zone'],
-# 	trips['in_peak'],
-# )
-#
-# trips['tnc_pool_cost'] = tnc_pool_cost(
-# 	dh,
-# 	trips['auto_time'],
-# 	trips['auto_dist'],
-# 	trips['o_zone'],
-# 	trips['d_zone'],
-# 	trips['in_peak'],
-# )
-#
-# trips['mode_and_time'] = trips.mode5code + trips.timeperiod*5
 
 L("## sample_dest_zones_and_data ##")
-trip_alt_df = sample_dest_zones_and_data(
-	trips,
-	n_zones=dh.n_internal_zones,
-	n_sampled_dests=n_sampled_dests,
-	keep_trips_cols=[
-		'd_zone',
-		'mode5',
-		'mode5code',
-		'incomeLevel',
-		'tripCat',
-		'tripPurpose',
-		'auto_dist',
-		'auto_time',
-		'auto_parking_cost',
-		'transit_fare',
-		'transit_ivtt',
-		'transit_ovtt',
-		'transit_headway',
-		'transit_approach_cost',
-		'transit_approach_drivetime',
-		'transit_approach_walktime',
-		'transit_approach_waittime',
-		'taxi_wait_time',
-		'taxi_fare',
-		'tnc_solo_wait_time',
-		'tnc_pool_wait_time',
-		'tnc_solo_fare',
-		'tnc_pool_fare',
-		'hhinc_dollars',
-		'timeperiod',
-		'mode_and_time',
-		'actualdest',
-	]
-)
-#
-# display(HTML(f"<h4>auto_dist statistics</h4>"))
-# display(trip_alt_df['auto_dist'].statistics())
-#
-# display(HTML(f"<h4>altdest0001_auto_dist statistics</h4>"))
-# display(trip_alt_df['altdest0001_auto_dist'].statistics())
-#
+TRIP_ALTS_CACHE_FILE = "trip_alts_v3"
+
+trip_alt_df = dh.filenames.load(TRIP_ALTS_CACHE_FILE)
+if trip_alt_df is None:
+	trip_alt_df = sample_dest_zones_and_data(
+		trips,
+		n_zones=dh.n_internal_zones,
+		n_sampled_dests=n_sampled_dests,
+		keep_trips_cols=[
+			'd_zone',
+			'mode5',
+			'mode5code',
+			'incomeLevel',
+			'tripCat',
+			'tripPurpose',
+			'auto_dist',
+			'auto_time',
+			'auto_parking_cost',
+			'transit_fare',
+			'transit_ivtt',
+			'transit_ovtt',
+			'transit_headway',
+			'transit_approach_cost',
+			'transit_approach_drivetime',
+			'transit_approach_walktime',
+			'transit_approach_waittime',
+			'taxi_wait_time',
+			'taxi_fare',
+			'tnc_solo_wait_time',
+			'tnc_pool_wait_time',
+			'tnc_solo_fare',
+			'tnc_pool_fare',
+			'hhinc_dollars',
+			'timeperiod',
+			'mode_and_time',
+			'actualdest',
+		]
+	)
+
+	#
+	# display(HTML(f"<h4>auto_dist statistics</h4>"))
+	# display(trip_alt_df['auto_dist'].statistics())
+	#
+	# display(HTML(f"<h4>altdest0001_auto_dist statistics</h4>"))
+	# display(trip_alt_df['altdest0001_auto_dist'].statistics())
+	#
 
 
-L("## invalid_walktime ##")
-invalid_walktime = trip_alt_df['transit_approach_walktime'] > 180
-trip_alt_df.loc[invalid_walktime, 'transit_approach_walktime'] = np.nan
+	L("## invalid_walktime ##")
+	invalid_walktime = trip_alt_df['transit_approach_walktime'] > 180
+	trip_alt_df.loc[invalid_walktime, 'transit_approach_walktime'] = np.nan
 
-L("## invalid_drivetime ##")
-invalid_drivetime = trip_alt_df['transit_approach_drivetime'] > 180
-trip_alt_df.loc[invalid_drivetime, 'transit_approach_drivetime'] = np.nan
+	L("## invalid_drivetime ##")
+	invalid_drivetime = trip_alt_df['transit_approach_drivetime'] > 180
+	trip_alt_df.loc[invalid_drivetime, 'transit_approach_drivetime'] = np.nan
 
-for i in range(n_sampled_dests):
-	for purpose in ['HW', 'HO', 'NH']:
-		L(f"# approach simulate for altdest{i + 1:04d} {purpose} ")
-		q = (trips.tripPurpose == purpose)
-		_trips_by_purpose = trip_alt_df[q]
-		result_purpose = transit_approach(
-			dh,
-			_trips_by_purpose.o_zone,
-			_trips_by_purpose[f'altdest{i + 1:04d}'],
-			purpose,
-			replication=1,
-			approach_distances=None,
-			trace=False,
-			random_state=123 + i,
-		)
-		for key in ['drivetime', 'walktime', 'cost', 'waittime']:
-			v = result_purpose[key][:, 0].astype(float)
-			if key in ['drivetime', 'walktime', 'waittime']:
-				v[v > 180] = np.nan
-			trip_alt_df.loc[q, f'altdest{i + 1:04d}_transit_approach_{key}'] = v
+	for i in range(n_sampled_dests):
+		for purpose in ['HW', 'HO', 'NH']:
+			L(f"# approach simulate for altdest{i + 1:04d} {purpose} ")
+			q = (trips.tripPurpose == purpose)
+			_trips_by_purpose = trip_alt_df[q]
+			result_purpose = transit_approach(
+				dh,
+				_trips_by_purpose.o_zone,
+				_trips_by_purpose[f'altdest{i + 1:04d}'],
+				purpose,
+				replication=1,
+				approach_distances=None,
+				trace=False,
+				random_state=123 + i,
+			)
+			for key in ['drivetime', 'walktime', 'cost', 'waittime']:
+				v = result_purpose[key][:, 0].astype(float)
+				if key in ['drivetime', 'walktime', 'waittime']:
+					v[v > 180] = np.nan
+				trip_alt_df.loc[q, f'altdest{i + 1:04d}_transit_approach_{key}'] = v
+
+	dh.filenames.save(TRIP_ALTS_CACHE_FILE, trip_alt_df)
 
 base_mode_names = list(trips.mode5.cat.categories)
 
@@ -273,12 +224,13 @@ for purpose, purpose_a in purposes:
 	)
 
 	for i in range(n_sampled_dests):
-		_df[f'altdest{i + 1:04d}_transit_avail'] = (
-			(  _df[f'altdest{i + 1:04d}_transit_ivtt'] < 999)
-			& (_df[f'altdest{i + 1:04d}_transit_approach_walktime'] < 999)
-			& (_df[f'altdest{i + 1:04d}_transit_approach_drivetime'] < 999)
-			& (_df[f'altdest{i + 1:04d}_attractions'] > 1e-290)
-		)
+		for t in timeperiod_names:
+			_df[f'altdest{i + 1:04d}_transit_avail_{t}'] = (
+				(  _df[f'altdest{i + 1:04d}_transit_ivtt_{t}'] < 999)
+				& (_df[f'altdest{i + 1:04d}_transit_approach_walktime'] < 999)
+				& (_df[f'altdest{i + 1:04d}_transit_approach_drivetime'] < 999)
+				& (_df[f'altdest{i + 1:04d}_attractions'] > 1e-290)
+			)
 		_df[f'altdest{i + 1:04d}_auto_avail'] = (_df[f'altdest{i + 1:04d}_attractions'] > 1e-290)
 	# Build IDCA folded data for later analysis
 	_ca_folded = {}
@@ -316,7 +268,7 @@ for purpose, purpose_a in purposes:
 		mods_preload[purpose] = False
 	m.dataservice = dfs
 	m.load_data()
-	m.diagnosis = m.doctor(repair_ch_av="-", repair_nan_data_co=True)
+	m.diagnosis = m.doctor(repair_ch_av="-")
 
 
 with open(dh.filenames.choice_model_param_file, 'w', encoding="utf-8") as cmp_yaml:
@@ -370,25 +322,6 @@ Pr = Dict()
 
 nests_per_dest = 7 # CHANGE ME if/when the number of nests per destination is altered in `model_builder`
 
-for purpose, m in mods.items():
-	m.dataframes.autoscale_weights()
-	display(HTML(f"<h3>{m.title}</h3>"))
-	if not mods_preload[purpose]:
-		m.maximize_loglike()
-		m.calculate_parameter_covariance()
-		m.to_xlsx(
-			cached_model_filename(purpose)
-		)
-		summary = m.most_recent_estimation_result.copy()
-		summary.pop('x', None)
-		summary.pop('d_loglike', None)
-		summary.pop('nit', None)
-		display(larch.util.dictx(summary).__xml__())
-		display(m.estimation_statistics())
-	_pr = m.probability(return_dataframe='names', include_nests=True)
-	n_elemental_alts = (n_sampled_dests+1)*5*n_timeperiods
-	Pr.ByDest[purpose] = _pr.iloc[:,n_elemental_alts+nests_per_dest-1:-1:nests_per_dest]
-	Pr.ByMode[purpose] = _pr.iloc[:,:n_elemental_alts]
 
 
 figures = Dict()
@@ -560,72 +493,95 @@ def mode_choice_summary(m):
 	display(result)
 	return result
 
+def estimation():
+	for purpose, m in mods.items():
 
+		if purpose != 'HBWH': continue # TODO stop short circuit
 
-for purpose, m in mods.items():
-	display(HTML(f"<h2>{m.title}</h2>"))
-	display(m.parameter_summary())
+		m.dataframes.autoscale_weights()
+		display(HTML(f"<h3>{m.title}</h3>"))
+		if not mods_preload[purpose]:
+			m.maximize_loglike()
+			m.calculate_parameter_covariance()
+			m.to_xlsx(
+				cached_model_filename(purpose)
+			)
+			summary = m.most_recent_estimation_result.copy()
+			summary.pop('x', None)
+			summary.pop('d_loglike', None)
+			summary.pop('nit', None)
+			display(larch.util.dictx(summary).__xml__())
+			display(m.estimation_statistics())
+		_pr = m.probability(return_dataframe='names', include_nests=True)
+		n_elemental_alts = (n_sampled_dests+1)*5*n_timeperiods
+		Pr.ByDest[purpose] = _pr.iloc[:,n_elemental_alts+nests_per_dest-1:-1:nests_per_dest]
+		Pr.ByMode[purpose] = _pr.iloc[:,:n_elemental_alts]
 
-	try:
-		mode_choice_summary(m)
-	except:
-		log.exception("exception in mode_choice_summary")
-		mode_choice_summary_success = False
-	else:
-		mode_choice_summary_success = True
+		display(HTML(f"<h2>{m.title}</h2>"))
+		display(m.parameter_summary())
 
-	try:
-		dest_profiler(purpose)
-	except:
-		log.exception("exception in dest_profiler")
-		dest_profiler_success = False
-	else:
-		dest_profiler_success = True
+		try:
+			mode_choice_summary(m)
+		except:
+			log.exception("exception in mode_choice_summary")
+			mode_choice_summary_success = False
+		else:
+			mode_choice_summary_success = True
 
-	try:
-		mode_share_profiler(purpose)
-	except:
-		log.exception("exception in mode_share_profiler")
-		mode_share_profiler_success = False
-	else:
-		mode_share_profiler_success = True
+		try:
+			dest_profiler(purpose)
+		except:
+			log.exception("exception in dest_profiler")
+			dest_profiler_success = False
+		else:
+			dest_profiler_success = True
 
-	try:
-		timeshare_profiler(purpose)
-	except:
-		log.exception("exception in timeshare_profiler")
-		time_share_profiler_success = False
-	else:
-		time_share_profiler_success = True
+		try:
+			mode_share_profiler(purpose)
+		except:
+			log.exception("exception in mode_share_profiler")
+			mode_share_profiler_success = False
+		else:
+			mode_share_profiler_success = True
 
-	xl = m.to_xlsx(
-		cached_model_filereport(purpose),
-		save_now=False
-	)
-	if dest_profiler_success:
-		xl.add_content_tab(
-			figures.distribution[purpose]['auto_dist'],
-			sheetname="Figures",
-			heading="Destination Probabilities by Distance",
+		try:
+			timeshare_profiler(purpose)
+		except:
+			log.exception("exception in timeshare_profiler")
+			time_share_profiler_success = False
+		else:
+			time_share_profiler_success = True
+
+		xl = m.to_xlsx(
+			cached_model_filereport(purpose),
+			save_now=False
 		)
-		xl.add_content_tab(
-			figures.distribution[purpose]['auto_time'],
-			sheetname="Figures",
-			heading="Destination Probabilities by Auto Travel Time",
-		)
-	if mode_share_profiler_success:
-		xl.add_content_tab(
-			figures.share[purpose]['auto_dist'],
-			sheetname="Figures",
-			heading="Mode Choice by Distance",
-		)
-	if time_share_profiler_success:
-		xl.add_content_tab(
-			figures.timeshare[purpose],
-			sheetname="Figures",
-			heading="Mode Choice by Time of Day",
-		)
-	xl.save()
+		if dest_profiler_success:
+			xl.add_content_tab(
+				figures.distribution[purpose]['auto_dist'],
+				sheetname="Figures",
+				heading="Destination Probabilities by Distance",
+			)
+			xl.add_content_tab(
+				figures.distribution[purpose]['auto_time'],
+				sheetname="Figures",
+				heading="Destination Probabilities by Auto Travel Time",
+			)
+		if mode_share_profiler_success:
+			xl.add_content_tab(
+				figures.share[purpose]['auto_dist'],
+				sheetname="Figures",
+				heading="Mode Choice by Distance",
+			)
+		if time_share_profiler_success:
+			xl.add_content_tab(
+				figures.timeshare[purpose],
+				sheetname="Figures",
+				heading="Mode Choice by Time of Day",
+			)
+		xl.save()
+
+	return mods
 
 resource_usage.check()
 L("## est_choice complete ##")

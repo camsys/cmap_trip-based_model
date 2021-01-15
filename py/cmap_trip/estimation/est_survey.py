@@ -146,6 +146,10 @@ if trips is None:
 		# convert invalid to nan
 		to_nan = trips[f'transit_{a}'] >= 9999
 		trips.loc[to_nan,f'transit_{a}'] = np.nan
+		to_nan = trips[f'transit_pk_{a}'] >= 9999
+		trips.loc[to_nan,f'transit_pk_{a}'] = np.nan
+		to_nan = trips[f'transit_op_{a}'] >= 9999
+		trips.loc[to_nan,f'transit_op_{a}'] = np.nan
 		trips[f'actualdest_transit_{a}'] = trips[f'transit_{a}']
 		trips[f'actualdest_transit_{a}_NIGHT'  ] = trips[f'transit_op_{a}']
 		trips[f'actualdest_transit_{a}_AM_PRE' ] = trips[f'transit_pk_{a}']
@@ -253,33 +257,36 @@ if trips is None:
 			+ trips_origin.map(tnc_pool_wait_op) * ~trips.in_peak
 	)
 
-	from ..tnc_costs import tnc_solo_cost, taxi_cost, tnc_pool_cost
+	from ..tnc_costs import tnc_solo_cost, taxi_cost, tnc_pool_cost, peak_tnc_pricing
+	from ..timeperiods import timeperiod_names
 
-	trips['actualdest_taxi_fare'] = taxi_cost(
-		dh,
-		trips['auto_time'],
-		trips['auto_dist'],
-		trips['o_zone'],
-		trips['d_zone'],
-	)
+	for t in timeperiod_names:
 
-	trips['actualdest_tnc_solo_fare'] = tnc_solo_cost(
-		dh,
-		trips['auto_time'],
-		trips['auto_dist'],
-		trips['o_zone'],
-		trips['d_zone'],
-		trips['in_peak'],
-	)
+		trips[f'actualdest_taxi_fare_{t}'] = taxi_cost(
+			dh,
+			trips[f'actualdest_auto_time_{t}'],
+			trips[f'actualdest_auto_dist_{t}'],
+			trips['o_zone'],
+			trips['d_zone'],
+		)
 
-	trips['actualdest_tnc_pool_fare'] = tnc_pool_cost(
-		dh,
-		trips['auto_time'],
-		trips['auto_dist'],
-		trips['o_zone'],
-		trips['d_zone'],
-		trips['in_peak'],
-	)
+		trips[f'actualdest_tnc_solo_fare_{t}'] = tnc_solo_cost(
+			dh,
+			trips[f'actualdest_auto_time_{t}'],
+			trips[f'actualdest_auto_dist_{t}'],
+			trips['o_zone'],
+			trips['d_zone'],
+			peak_tnc_pricing[t],
+		)
+
+		trips[f'actualdest_tnc_pool_fare_{t}'] = tnc_pool_cost(
+			dh,
+			trips[f'actualdest_auto_time_{t}'],
+			trips[f'actualdest_auto_dist_{t}'],
+			trips['o_zone'],
+			trips['d_zone'],
+			peak_tnc_pricing[t],
+		)
 
 	trips['actualdest'] = trips['d_zone']
 	trips['mode3code'] = trips.mode3.cat.codes + 1
