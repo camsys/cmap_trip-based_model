@@ -12,21 +12,17 @@ from cmap_trip.application import choice_simulator_trips, choice_simulator_trips
 L("#### Single process application test ####")
 sim_trips = choice_simulator_trips(
     dh,
-    purpose="HBWH",
-    otaz=np.arange(1, 1+10),
+    otaz=np.arange(1, 1+50),
 )
 
 
-import os
-os.makedirs("/tmp/cmap-log", exist_ok=True)
+sim_trips
 
 L("#### Multiprocess application test ####")
 sim_trips5 = choice_simulator_trips_many(
     dh,
-    purpose="HBWH",
-    otaz=np.arange(1, 1+360),
-    max_chunk_size=15,
-    n_jobs=8,
+    max_chunk_size=50,
+    n_jobs=2,
 )
 
 L("#### application test complete ####")

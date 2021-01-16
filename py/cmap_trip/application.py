@@ -18,6 +18,7 @@ log = getLogger()
 
 mode5codes = Dict({'AUTO': 1, 'TAXI': 2, 'TNC1': 3, 'TNC2': 4, 'TRANSIT': 5})
 n_timeperiods = len(timeperiod_names)
+n_modes = len(mode5codes)
 
 av = {}
 
@@ -65,7 +66,8 @@ def _data_for_application_1(dh, otaz=1, peak=True, purpose='HBWH', replication=N
 		'NHB': 'nha',
 	}
 	df1['attractions'] = dh.trip_attractions[attractions_mapping[purpose]]
-	df1['log(attractions)'] = np.log(df1['attractions'])
+	with np.errstate(divide='ignore'):
+		df1['log(attractions)'] = np.log(df1['attractions'])
 	df1['attractions > 1e-290'] = (df1['attractions'] > 1e-290)
 
 	df1['o_zone == dtaz'] = (otaz == df1['dtaz'])
@@ -301,102 +303,130 @@ def blockwise_mean(a, blocksize):
 
 choice_simulator_global = Dict()
 
+def choice_simulator_initialize(dh, return_simulators=True):
 
-def choice_simulator_prob(dh, purpose, otaz):
-	"""
-
-	Parameters
-	----------
-	purpose : str
-	otaz : int or array-like
-	peak : bool
-
-	Returns
-	-------
-
-	"""
-	log.debug("choice_simulator_prob.data_for_application")
-	dfa = data_for_application(dh, otaz=otaz, peak=('HBW' in purpose))
-
-	log.debug("choice_simulator_prob.settings")
+	log.debug("initializing choice simulator")
 	auto_cost_per_mile = dh.cfg.auto.cost.per_mile
-	n_sampled_dests = dh.n_internal_zones
+	n_zones = dh.n_internal_zones
 	choice_model_params = dh.choice_model_params
-	replication = dh.cfg.get('n_replications', 50)
 
-	if (auto_cost_per_mile, n_sampled_dests) in choice_simulator_global:
-		choice_simulator = choice_simulator_global[(auto_cost_per_mile, n_sampled_dests)]
+	if (auto_cost_per_mile, n_zones) in choice_simulator_global:
+		choice_simulator = choice_simulator_global[(auto_cost_per_mile, n_zones)]
 	else:
 		choice_simulator = Dict()
 		for purpose in ['HBWH', 'HBWL', 'HBO', 'NHB']:
 			choice_simulator[purpose] = model_builder(
 				purpose=purpose,
 				include_actual_dest=False,
-				n_sampled_dests=len(dh.m01),  # 3632,
+				n_sampled_dests=n_zones,  # 3632,
 				parameter_values=choice_model_params[purpose],
+				constraints=False,
 			)
-		choice_simulator_global[(auto_cost_per_mile, n_sampled_dests)] = choice_simulator
+		choice_simulator_global[(auto_cost_per_mile, n_zones)] = choice_simulator
 
-	sim = choice_simulator[purpose]
-	log.debug("choice_simulator_prob.attach dataframes")
-	if sim.dataframes is None:
-		sim.dataframes = dfa
-	else:
-		sim.set_dataframes(dfa, False)
-	log.debug("choice_simulator_prob.simulate probability")
-	sim_pr = sim.probability()
-	log.debug("choice_simulator_prob.blockwise_mean")
-	sim_pr = blockwise_mean(sim_pr, replication)
-	return sim_pr #.reshape([sim_pr.shape[0],-1,5])
+	if return_simulators:
+		return choice_simulator
 
-
-
-def choice_simulator_trips(dh, purpose, otaz, random_state=None):
+def choice_simulator_prob(dh, otaz):
 	"""
 
 	Parameters
 	----------
-	purpose : str
 	otaz : int or array-like
-	peak : bool
 
 	Returns
 	-------
 
 	"""
+	log.debug("choice_simulator_prob data_for_application")
+	dfa = data_for_application(dh, otaz=otaz, peak=True) # TODO no more peak
+
+	log.debug("choice_simulator_prob settings")
+	replication = dh.cfg.get('n_replications', 50)
+
+	choice_simulator = choice_simulator_initialize(dh)
+	simulated_probability = {}
+
+	for purpose in ['HBWH', 'HBWL', 'HBO', 'NHB']:
+		sim = choice_simulator[purpose]
+		log.debug(f"choice_simulator_prob {purpose} attach dataframes")
+		if sim.dataframes is None:
+			sim.dataframes = dfa
+		else:
+			sim.set_dataframes(dfa, False)
+		log.debug(f"choice_simulator_prob {purpose} simulate probability")
+		sim_pr = sim.probability()
+		log.debug(f"choice_simulator_prob {purpose} blockwise_mean")
+		simulated_probability[purpose] = blockwise_mean(sim_pr, replication)
+
+	log.debug("choice_simulator_prob complete")
+	return simulated_probability #.reshape([sim_pr.shape[0],-1,5])
+
+
+
+def choice_simulator_trips(dh, otaz, purposes=None, random_state=None):
+	"""
+
+	Parameters
+	----------
+	otaz : int or array-like
+	purposes : Collection, optional
+
+	Returns
+	-------
+
+	"""
+	if purposes is None:
+		purposes = ['HBWH', 'HBWL', 'HBO', 'NHB']
 
 	if isinstance(otaz, int):
 		otaz = [otaz]
-	sim_pr = choice_simulator_prob(
+	simulated_probability = choice_simulator_prob(
 		dh,
-		purpose=purpose,
 		otaz=otaz,
 	)
+	simulated_choices = {}
 
 	random_state = check_random_state(random_state or otaz[0])
-	choices_data = {}
+	for purpose in purposes:
+		choices_data = {}
 
-	for n, _o in enumerate(otaz):
-		p = sim_pr[n]
-		c = random_state.choice(p.size, size=dh.zone_productions.loc[_o,purpose], p=p)
-		choices_data[_o] = pd.DataFrame(dict(
-			mode=(c % 5) + 1,
-			zone=(c // 5) + 1,
-		)).value_counts().sort_index().rename(_o)
+		for n, _o in enumerate(otaz):
+			p = simulated_probability[purpose][n]
+			c = random_state.choice(p.size, size=dh.zone_productions.loc[_o,purpose], p=p)
+			c_ = (c // n_modes)
+			choices_data[_o] = pd.DataFrame(dict(
+				mode=(c % n_modes) + 1,
+				timeperiod=(c_ % n_timeperiods) + 1,
+				zone=(c_ // n_timeperiods) + 1,
+			)).value_counts().sort_index().rename(_o).astype(np.int16)
 
-	full_index = pd.MultiIndex.from_product(
-		[np.arange(5) + 1, np.arange(len(dh.m01)) + 1],
-		names=['mode', 'zone'],
-	)
+		full_index = pd.MultiIndex.from_product(
+			[
+				np.arange(n_modes) + 1,
+				np.arange(n_timeperiods) + 1,
+				np.arange(dh.n_internal_zones) + 1,
+			],
+			names=[
+				'mode',
+				'timeperiod',
+				'a_zone',
+			],
+		)
 
-	return pd.concat(
-		choices_data,
-		axis=1,
-	).reindex(full_index).fillna(0).astype(int).T
+		simulated_choices[purpose] = pd.concat(
+			choices_data,
+			axis=1,
+		).reindex(full_index).fillna(0).astype(np.int16)
+		simulated_choices[purpose].columns.name = 'p_zone'
+
+	return pd.concat(simulated_choices)
 
 
+def choice_simulator_trips_many(dh, otaz=None, purposes=None, max_chunk_size=20, n_jobs=5, init_step=True):
 
-def choice_simulator_trips_many(dh, purpose, otaz, max_chunk_size=20, n_jobs=5, init_step=False):
+	if otaz is None:
+		otaz = np.arange(dh.n_internal_zones)+1
 
 	# auto chunk size calculation
 	n_chunks_per_job = 0
@@ -408,26 +438,26 @@ def choice_simulator_trips_many(dh, purpose, otaz, max_chunk_size=20, n_jobs=5, 
 			break
 
 	otaz_chunks = [otaz[i:i + chunk_size] for i in range(0, len(otaz), chunk_size)]
-	init_chunks = [otaz[i:i+1] for i in range(0,min(len(otaz),n_jobs))]
+	inits = [None for _ in range(0,min(len(otaz),n_jobs))]
 
 	import joblib
 
-	with joblib.Parallel(n_jobs=n_jobs) as parallel:
+	with joblib.Parallel(n_jobs=n_jobs, verbose=100) as parallel:
 		if init_step:
 			log.info("joblib model init starting")
 			_ = parallel(
-				joblib.delayed(choice_simulator_trips)(dh, purpose, otaz_chunk)
-				for otaz_chunk in init_chunks
+				joblib.delayed(choice_simulator_initialize)(dh, False)
+				for _ in inits
 			)
 			log.info("joblib model init complete")
 		else:
 			log.info("joblib model body starting")
 		parts = parallel(
-			joblib.delayed(choice_simulator_trips)(dh, purpose, otaz_chunk)
+			joblib.delayed(choice_simulator_trips)(dh, otaz_chunk, purposes=purposes)
 			for otaz_chunk in otaz_chunks
 		)
 		log.info("joblib model body complete")
-	return pd.concat(parts)
+	return pd.concat(parts, axis=1)
 
 
 

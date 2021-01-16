@@ -154,12 +154,50 @@ def model_utility_for_dest(
 	)
 
 
+def _lock_value(self, name, value, note=None, change_check=True):
+	"""
+	Set a fixed value for a model parameter.
+
+	Parameters with a fixed value (i.e., with "holdfast" set to 1)
+	will not be changed during estimation by the likelihood
+	maximization algorithm.
+
+	Parameters
+	----------
+	name : str
+		The name of the parameter to set to a fixed value.
+	value : float
+		The numerical value to set for the parameter.
+	note : str, optional
+		A note as to why this parameter is set to a fixed value.
+		This will not affect the mathematical treatment of the
+		parameter in any way, but may be useful for reporting.
+	change_check : bool, default True
+		Whether to trigger a check to see if any parameter frame
+		values have changed.  Can be set to false to skip this
+		check if you know that the values have not changed or want
+		to delay this check for later, but this may result in
+		problems if the check is needed but not triggered before
+		certain other modeling tasks are performed.
+
+	"""
+	name = str(name)
+	if value is 'null':
+		value = self.pf.loc[name, 'nullvalue']
+	self.set_value(name, value, holdfast=1, initvalue=value, nullvalue=value, minimum=value, maximum=value)
+	if note is not None:
+		self._frame.loc[name, 'note'] = note
+	if change_check:
+		self._check_if_frame_values_changed()
+
+
 def model_builder(
 		purpose,
 		include_actual_dest=True,
 		n_sampled_dests=5,
 		parameter_values=None,
 		auto_cost_per_mile=30, # cents
+		constraints=True,
 ):
 	log.debug(f"model_builder({purpose}, n_sampled_dests={n_sampled_dests})")
 
@@ -384,8 +422,13 @@ def model_builder(
 	# 		name=f"altdest{i + 1:04d}",
 	# 	)
 
-	m.lock_value("samp_af", value=1.0)
-	m.lock_value("log_attraction", value=1.0)
+	# with m.batch_update():
+		# _lock_value(m, "samp_af", value=1.0)
+		# _lock_value(m, "log_attraction", value=1.0)
+
+	m.unmangle()
+	set1(m)
+	set2(m)
 
 	m.set_value("cost", maximum=-0.00001)
 	m.set_value("auto_time", maximum=-0.01, minimum=-0.03)
@@ -407,11 +450,20 @@ def model_builder(
 	else:
 		m.set_values(**parameter_values)
 
-	from larch.model.constraints import RatioBound
-	m.constraints = [
-		RatioBound(P("ovtt"), P("transit_ivtt"), min_ratio=1.5, max_ratio=3.0, scale=1),
-		RatioBound(P("Mu-HiredCar"), P("Mu-Dest"), min_ratio=1e-5, max_ratio=1.0, scale=1),
-		RatioBound(P("Mu-Timeperiod"), P("Mu-HiredCar"), min_ratio=1e-5, max_ratio=1.0, scale=1),
-	]
+	if constraints:
+		from larch.model.constraints import RatioBound
+		m.constraints = [
+			RatioBound(P("ovtt"), P("transit_ivtt"), min_ratio=1.5, max_ratio=3.0, scale=1),
+			RatioBound(P("Mu-HiredCar"), P("Mu-Dest"), min_ratio=1e-5, max_ratio=1.0, scale=1),
+			RatioBound(P("Mu-Timeperiod"), P("Mu-HiredCar"), min_ratio=1e-5, max_ratio=1.0, scale=1),
+		]
 
 	return m
+
+
+def set1(m):
+	_lock_value(m, "samp_af", value=1.0)
+
+
+def set2(m):
+	_lock_value(m, "log_attraction", value=1.0)
