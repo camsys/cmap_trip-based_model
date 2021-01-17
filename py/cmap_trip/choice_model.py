@@ -198,6 +198,7 @@ def model_builder(
 		parameter_values=None,
 		auto_cost_per_mile=30, # cents
 		constraints=True,
+		n_threads=-1,
 ):
 	log.debug(f"model_builder({purpose}, n_sampled_dests={n_sampled_dests})")
 
@@ -246,7 +247,8 @@ def model_builder(
 
 
 	m = larch.Model(
-		dataservice=dummy_dfs
+		dataservice=dummy_dfs,
+		n_threads=n_threads,
 	)
 
 	m.title = f"{purpose} Mode & Destination"

@@ -23,7 +23,7 @@ n_modes = len(mode5codes)
 av = {}
 
 
-def _data_for_application_1(dh, otaz=1, peak=True, purpose='HBWH', replication=None):
+def _data_for_application_1(dh, otaz=1, peak=True, purpose='HBWH', replication=None, debug1=False):
 	"""
 
 	Parameters
@@ -203,16 +203,27 @@ def _data_for_application_1(dh, otaz=1, peak=True, purpose='HBWH', replication=N
 		df2['attractions'] > 1e-290
 	)
 
-	df2['rep'] = np.repeat(np.arange(replication)+1, len(df1))
-	df2['altdest'] = df2['dtaz'].apply(lambda x: f"altdest{x:04d}")
-	df2 = df2.set_index(['rep','altdest']).unstack()
-	df2['o_zone'] = otaz
+	# df2['rep'] = np.repeat(np.arange(replication)+1, len(df1))
+	# df2['altdest'] = df2['dtaz'].apply(lambda x: f"altdest{x:04d}")
+	# df3 = df2.set_index(['rep','altdest']).unstack()
 
-	return df2
+	df3 = pd.DataFrame(
+		df2.to_numpy(dtype=np.float64).reshape(replication, -1),
+		columns=pd.MultiIndex.from_product([
+			[f"altdest{x:04d}" for x in range(1,n_zones+1)],
+			df2.columns,
+		])
+	)
+
+	df3.columns = [f"{j[0]}_{j[1]}" for j in df3.columns]
+	df3['o_zone'] = otaz
+
+	return df3
 
 def _data_for_application_2(dh, df2):
 
-	columns = [f"{j[1]}_{j[0]}" for j in df2.columns]
+	#columns = [f"{j[1]}_{j[0]}" for j in df2.columns]
+	columns = df2.columns
 
 	if columns[-1] == '_o_zone':
 		columns[-1] = 'o_zone'
@@ -321,6 +332,7 @@ def choice_simulator_initialize(dh, return_simulators=True):
 				n_sampled_dests=n_zones,  # 3632,
 				parameter_values=choice_model_params[purpose],
 				constraints=False,
+				n_threads=1,
 			)
 		choice_simulator_global[(auto_cost_per_mile, n_zones)] = choice_simulator
 
