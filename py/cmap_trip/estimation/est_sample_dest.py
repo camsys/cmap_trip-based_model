@@ -6,8 +6,7 @@ from .est_data import dh
 skims = dh.skims
 zone_shp = dh.zone_shp
 m01 = dh.m01
-from ..tnc_costs import taxi_cost, tnc_solo_cost, tnc_pool_cost, peak_tnc_pricing
-from ..timeperiods import timeperiod_names
+from ..tnc_costs import taxi_cost, tnc_solo_cost, tnc_pool_cost
 
 
 log = cmap_trip.log_to_stderr(level=10)
@@ -80,6 +79,7 @@ def sample_dest_zones_and_data(
 		trips, n_zones, n_sampled_dests, wgt_func,
 	)
 
+	purposes = ['HBWH', 'HBWL', 'HBO', 'NHB']
 	_keep_trips_cols = []
 	for k in keep_trips_cols:
 		if k in trips.columns:
@@ -87,9 +87,15 @@ def sample_dest_zones_and_data(
 		k = f"actualdest_{k}"
 		if k in trips.columns:
 			_keep_trips_cols.append(k)
-		for t in timeperiod_names:
+		for t in ['PEAK', 'OFFPEAK']:
 			if f"{k}_{t}" in trips.columns:
 				_keep_trips_cols.append(f"{k}_{t}")
+		for purpose in purposes:
+			if f"{k}_{purpose}" in trips.columns:
+				_keep_trips_cols.append(f"{k}_{purpose}")
+		for purpose3 in ['HW','HO','NH']:
+			if f"{k}_{purpose3}" in trips.columns:
+				_keep_trips_cols.append(f"{k}_{purpose3}")
 
 	trip_alt_dest_df = trips[[ozone_col, 'in_peak', *_keep_trips_cols]]
 
@@ -139,36 +145,12 @@ def sample_dest_zones_and_data(
 					'mf47_mddist': f'{labeler(i)}_auto_op_dist',
 				}),
 				(None, {
-					'mf44_amtime': f'{labeler(i)}_auto_time_AM_PRE',
-					'mf45_amdist': f'{labeler(i)}_auto_dist_AM_PRE',
+					'mf44_amtime': f'{labeler(i)}_auto_time_PEAK',
+					'mf45_amdist': f'{labeler(i)}_auto_dist_PEAK',
 				}),
 				(None, {
-					'mf44_amtime': f'{labeler(i)}_auto_time_AM_PEAK',
-					'mf45_amdist': f'{labeler(i)}_auto_dist_AM_PEAK',
-				}),
-				(None, {
-					'mf44_amtime': f'{labeler(i)}_auto_time_AM_POST',
-					'mf45_amdist': f'{labeler(i)}_auto_dist_AM_POST',
-				}),
-				(None, {
-					'mf44_amtime': f'{labeler(i)}_auto_time_PM_PRE',
-					'mf45_amdist': f'{labeler(i)}_auto_dist_PM_PRE',
-				}),
-				(None, {
-					'mf44_amtime': f'{labeler(i)}_auto_time_PM_PEAK',
-					'mf45_amdist': f'{labeler(i)}_auto_dist_PM_PEAK',
-				}),
-				(None, {
-					'mf44_amtime': f'{labeler(i)}_auto_time_PM_POST',
-					'mf45_amdist': f'{labeler(i)}_auto_dist_PM_POST',
-				}),
-				(None, {
-					'mf46_mdtime': f'{labeler(i)}_auto_time_MIDDAY',
-					'mf47_mddist': f'{labeler(i)}_auto_dist_MIDDAY',
-				}),
-				(None, {
-					'mf46_mdtime': f'{labeler(i)}_auto_time_NIGHT',
-					'mf47_mddist': f'{labeler(i)}_auto_dist_NIGHT',
+					'mf46_mdtime': f'{labeler(i)}_auto_time_OFFPEAK',
+					'mf47_mddist': f'{labeler(i)}_auto_dist_OFFPEAK',
 				}),
 			),
 		)
@@ -192,7 +174,7 @@ def sample_dest_zones_and_data(
 				+ origin_zone.map(tnc_pool_wait_op) * ~trips.in_peak
 		)
 		# Add taxi and TNC fare data
-		for t in timeperiod_names:
+		for t in ['PEAK', 'OFFPEAK']:
 			trip_alt_dest_df[f'{labeler(i)}_taxi_fare_{t}'] = taxi_cost(
 				dh,
 				trip_alt_dest_df[f'{labeler(i)}_auto_time_{t}'],
@@ -206,7 +188,7 @@ def sample_dest_zones_and_data(
 				trip_alt_dest_df[f'{labeler(i)}_auto_dist_{t}'],
 				origin_zone,
 				destin_zone,
-				peak_tnc_pricing[t],
+				1 if (t=='PEAK') else 0,
 			)
 			trip_alt_dest_df[f'{labeler(i)}_tnc_pool_fare_{t}'] = tnc_pool_cost(
 				dh,
@@ -214,7 +196,7 @@ def sample_dest_zones_and_data(
 				trip_alt_dest_df[f'{labeler(i)}_auto_dist_{t}'],
 				origin_zone,
 				destin_zone,
-				peak_tnc_pricing[t],
+				1 if (t=='PEAK') else 0,
 			)
 
 		# attach transit skims
@@ -231,27 +213,7 @@ def sample_dest_zones_and_data(
 					for j in skim_tags
 				}),
 				(None, {
-					skims.transit_pk.col_mapping[j]: f'{labeler(i)}_transit_{j}_AM_PRE'
-					for j in skim_tags
-				}),
-				(None, {
-					skims.transit_pk.col_mapping[j]: f'{labeler(i)}_transit_{j}_AM_PEAK'
-					for j in skim_tags
-				}),
-				(None, {
-					skims.transit_pk.col_mapping[j]: f'{labeler(i)}_transit_{j}_AM_POST'
-					for j in skim_tags
-				}),
-				(None, {
-					skims.transit_pk.col_mapping[j]: f'{labeler(i)}_transit_{j}_PM_PRE'
-					for j in skim_tags
-				}),
-				(None, {
-					skims.transit_pk.col_mapping[j]: f'{labeler(i)}_transit_{j}_PM_PEAK'
-					for j in skim_tags
-				}),
-				(None, {
-					skims.transit_pk.col_mapping[j]: f'{labeler(i)}_transit_{j}_PM_POST'
+					skims.transit_pk.col_mapping[j]: f'{labeler(i)}_transit_{j}_PEAK'
 					for j in skim_tags
 				}),
 			),
@@ -267,11 +229,7 @@ def sample_dest_zones_and_data(
 					for j in skim_tags
 				}),
 				(None, {
-					skims.transit_op.col_mapping[j]: f'{labeler(i)}_transit_{j}_MIDDAY'
-					for j in skim_tags
-				}),
-				(None, {
-					skims.transit_op.col_mapping[j]: f'{labeler(i)}_transit_{j}_NIGHT'
+					skims.transit_op.col_mapping[j]: f'{labeler(i)}_transit_{j}_OFFPEAK'
 					for j in skim_tags
 				}),
 			),
@@ -280,26 +238,31 @@ def sample_dest_zones_and_data(
 		log.debug(f"clipping to set invalid skim values to NaN <{i}>")
 		for j in ['ivtt', 'ovtt', 'headway', 'fare']:
 			x = trip_alt_dest_df[f'{labeler(i)}_transit_{j}']
-			trip_alt_dest_df.loc[x>999, f'{labeler(i)}_transit_{j}'] = np.nan
-			for t in timeperiod_names:
+			trip_alt_dest_df.loc[x>9999, f'{labeler(i)}_transit_{j}'] = np.nan
+			for t in ['PEAK', 'OFFPEAK']:
 				varname = f'{labeler(i)}_transit_{j}_{t}'
 				x = trip_alt_dest_df[varname]
-				trip_alt_dest_df.loc[x > 999, varname] = np.nan
+				trip_alt_dest_df.loc[x > 9999, varname] = np.nan
 
 		# parking costs
 		from ..parking_costs import parking_cost_v2
-		for purpose in ['HW', 'HO', 'NH']:
-			q = (trip_alt_dest_df.tripPurpose == purpose)
+		purpose_collapse = dict(
+			HBWH='HW',
+			HBWL='HW',
+			HBO='HO',
+			NHB='NH',
+		)
+		for purpose in ['HBWH', 'HBWL', 'HBO', 'NHB']:
 			_parking_cost, _free_parking = parking_cost_v2(
 				dh,
-				destin_zone[q],
-				trip_alt_dest_df.loc[q,'hhinc_dollars'],
-				dh.cfg.default_activity_durations[purpose],
-				purpose,
+				destin_zone,
+				trip_alt_dest_df['hhinc_dollars'],
+				dh.cfg.default_activity_durations[purpose_collapse[purpose]],
+				purpose_collapse[purpose],
 				random_state=hash(purpose) + 1,
 			)
-			trip_alt_dest_df.loc[q,f'{labeler(i)}_auto_parking_cost'] = _parking_cost
-			trip_alt_dest_df.loc[q,f'{labeler(i)}_auto_parking_free'] = _free_parking
+			trip_alt_dest_df[f'{labeler(i)}_auto_parking_cost_{purpose}'] = _parking_cost
+			trip_alt_dest_df[f'{labeler(i)}_auto_parking_free_{purpose}'] = _free_parking
 
 	return trip_alt_dest_df
 

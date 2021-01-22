@@ -25,7 +25,7 @@ cfg = dh.cfg
 skims = dh.skims
 
 
-TRIPS_CACHE_FILE = "trips_with_ae_v14"
+TRIPS_CACHE_FILE = "trips_with_ae_v15"
 
 hh = pd.read_csv(dh.SURVEY_DATA_DIR / 'household.csv')
 ae = pd.read_csv(dh.AE_DATA_DIR / 'access_egress.csv')
@@ -130,14 +130,8 @@ if trips is None:
 		trips[f'auto_{a}'] = trips[f'auto_md_{a}']
 		trips.loc[peak,f'auto_{a}'] = trips.loc[peak,f'auto_am_{a}']
 		trips[f'actualdest_auto_{a}'] = trips[f'auto_{a}']
-		trips[f'actualdest_auto_{a}_NIGHT'  ] = trips[f'auto_md_{a}']
-		trips[f'actualdest_auto_{a}_AM_PRE' ] = trips[f'auto_am_{a}']
-		trips[f'actualdest_auto_{a}_AM_PEAK'] = trips[f'auto_am_{a}']
-		trips[f'actualdest_auto_{a}_AM_POST'] = trips[f'auto_am_{a}']
-		trips[f'actualdest_auto_{a}_MIDDAY' ] = trips[f'auto_md_{a}']
-		trips[f'actualdest_auto_{a}_PM_PRE' ] = trips[f'auto_am_{a}']
-		trips[f'actualdest_auto_{a}_PM_PEAK'] = trips[f'auto_am_{a}']
-		trips[f'actualdest_auto_{a}_PM_POST'] = trips[f'auto_am_{a}']
+		trips[f'actualdest_auto_{a}_OFFPEAK'  ] = trips[f'auto_md_{a}']
+		trips[f'actualdest_auto_{a}_PEAK'     ] = trips[f'auto_am_{a}']
 
 	transit_cols = ['ivtt','ovtt','headway','fare','firstmode','lastmode','prioritymode']
 	for a in transit_cols:
@@ -151,14 +145,8 @@ if trips is None:
 		to_nan = trips[f'transit_op_{a}'] >= 9999
 		trips.loc[to_nan,f'transit_op_{a}'] = np.nan
 		trips[f'actualdest_transit_{a}'] = trips[f'transit_{a}']
-		trips[f'actualdest_transit_{a}_NIGHT'  ] = trips[f'transit_op_{a}']
-		trips[f'actualdest_transit_{a}_AM_PRE' ] = trips[f'transit_pk_{a}']
-		trips[f'actualdest_transit_{a}_AM_PEAK'] = trips[f'transit_pk_{a}']
-		trips[f'actualdest_transit_{a}_AM_POST'] = trips[f'transit_pk_{a}']
-		trips[f'actualdest_transit_{a}_MIDDAY' ] = trips[f'transit_op_{a}']
-		trips[f'actualdest_transit_{a}_PM_PRE' ] = trips[f'transit_pk_{a}']
-		trips[f'actualdest_transit_{a}_PM_PEAK'] = trips[f'transit_pk_{a}']
-		trips[f'actualdest_transit_{a}_PM_POST'] = trips[f'transit_pk_{a}']
+		trips[f'actualdest_transit_{a}_OFFPEAK'] = trips[f'transit_op_{a}']
+		trips[f'actualdest_transit_{a}_PEAK'   ] = trips[f'transit_pk_{a}']
 
 	# trips = trips.drop([f'auto_am_{a}' for a in auto_cols], axis=1)
 	# trips = trips.drop([f'auto_md_{a}' for a in auto_cols], axis=1)
@@ -178,6 +166,7 @@ if trips is None:
 	from ..parking_costs import parking_cost_v2
 
 	for purpose in ['HW','HO','NH']:
+		# TODO only by peak and offpeak?
 		q = (trips.tripPurpose == purpose)
 		_trips_by_purpose = trips[q]
 		result_purpose = transit_approach(
@@ -196,19 +185,27 @@ if trips is None:
 			trips.loc[q, f'ae_{key}_mean'] = result_purpose[key].mean(1)
 			trips.loc[q, f'ae_{key}_single'] = result_purpose[key][:,0]
 
+	purpose_collapse = dict(
+		HBWH='HW',
+		HBWL='HW',
+		HBO='HO',
+		NHB='NH',
+	)
+	for purpose in ['HBWH', 'HBWL', 'HBO', 'NHB']:
+
 		# Attach parking costs
 		_parking_cost, _free_parking = parking_cost_v2(
 			dh,
-			_trips_by_purpose.d_zone,
-			_trips_by_purpose.hhinc_dollars,
-			cfg.default_activity_durations[purpose],
-			purpose,
+			trips.d_zone,
+			trips.hhinc_dollars,
+			cfg.default_activity_durations[purpose_collapse[purpose]],
+			purpose_collapse[purpose],
 			random_state=hash(purpose)+1,
 		)
-		trips.loc[q, f'actualdest_auto_parking_cost'] = _parking_cost
-		trips.loc[q, f'actualdest_auto_parking_free'] = _free_parking
+		trips[f'actualdest_auto_parking_cost_{purpose}'] = _parking_cost
+		trips[f'actualdest_auto_parking_free_{purpose}'] = _free_parking
 
-	trips[f'actualdest_auto_parking_free'] = trips[f'actualdest_auto_parking_free'].fillna(0)
+		trips[f'actualdest_auto_parking_free_{purpose}'] = trips[f'actualdest_auto_parking_free_{purpose}'].fillna(0)
 
 	# for n in trips.index:
 	# 	out = transit_approach(
@@ -258,9 +255,8 @@ if trips is None:
 	)
 
 	from ..tnc_costs import tnc_solo_cost, taxi_cost, tnc_pool_cost, peak_tnc_pricing
-	from ..timeperiods import timeperiod_names
 
-	for t in timeperiod_names:
+	for t in ['PEAK', 'OFFPEAK']:
 
 		trips[f'actualdest_taxi_fare_{t}'] = taxi_cost(
 			dh,
@@ -276,7 +272,7 @@ if trips is None:
 			trips[f'actualdest_auto_dist_{t}'],
 			trips['o_zone'],
 			trips['d_zone'],
-			peak_tnc_pricing[t],
+			1 if (t=='PEAK') else 0,
 		)
 
 		trips[f'actualdest_tnc_pool_fare_{t}'] = tnc_pool_cost(
@@ -285,7 +281,7 @@ if trips is None:
 			trips[f'actualdest_auto_dist_{t}'],
 			trips['o_zone'],
 			trips['d_zone'],
-			peak_tnc_pricing[t],
+			1 if (t=='PEAK') else 0,
 		)
 
 	trips['actualdest'] = trips['d_zone']
@@ -389,25 +385,25 @@ def ae_approach_los(trips):
 	approach_distances[lm7, DIST_TO_METRA, 1] = trips[lm7].walkEgrDistance
 
 	result = Dict()
-	for purpose in ['HW','HO','NH']:
-		q = (trips.tripPurpose == purpose)
-		_trips_by_purpose = trips[q]
-		result[purpose] = transit_approach(
+	for purpose3 in ['HW','HO','NH']:
+		# q = (trips.tripPurpose == purpose3)
+		# _trips_by_purpose = trips[q]
+		result[purpose3] = transit_approach(
 			dh,
-			_trips_by_purpose.o_zone,
-			_trips_by_purpose.d_zone,
-			purpose,
+			trips.o_zone,
+			trips.d_zone,
+			purpose3,
 			replication=1,
-			approach_distances=approach_distances[q],
+			approach_distances=approach_distances,
 			trace=False,
 			random_state=123,
 		)
 
 		for key in ['drivetime', 'walktime', 'cost', 'waittime']:
-			trips.loc[q, f'transit_approach_{key}'] = result[purpose][key].reshape(-1)
-			trips.loc[q, f'actualdest_transit_approach_{key}'] = result[purpose][key].reshape(-1)
-		trips.loc[q,f'transit_approach_acc_mode'] = result[purpose]['approach_mode'][...,0].reshape(-1)
-		trips.loc[q,f'transit_approach_egr_mode'] = result[purpose]['approach_mode'][...,1].reshape(-1)
+			trips[f'transit_approach_{key}_{purpose3}'] = result[purpose3][key].reshape(-1)
+			trips[f'actualdest_transit_approach_{key}_{purpose3}'] = result[purpose3][key].reshape(-1)
+		trips[f'transit_approach_acc_mode_{purpose3}'] = result[purpose3]['approach_mode'][...,0].reshape(-1)
+		trips[f'transit_approach_egr_mode_{purpose3}'] = result[purpose3]['approach_mode'][...,1].reshape(-1)
 
 	ad = pd.DataFrame(
 		approach_distances.reshape([-1, 10]),

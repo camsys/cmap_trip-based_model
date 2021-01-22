@@ -124,3 +124,15 @@ def search_path(*paths):
 		pth = os.path.expandvars(pth)
 		if os.path.exists(pth):
 			return Path(pth)
+
+
+from contextlib import contextmanager
+
+@contextmanager
+def profiler():
+	from pyinstrument import Profiler
+	profiler = Profiler()
+	profiler.start()
+	yield
+	profiler.stop()
+	print(profiler.output_text(unicode=True, color=True))

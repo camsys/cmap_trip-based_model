@@ -30,9 +30,6 @@ from .est_config import mode_modeled
 from .est_survey import trips
 from .est_sample_dest import sample_dest_zones_and_data
 from ..util import resource_usage
-from ..timeperiods import timeperiod_names
-
-n_timeperiods = len(timeperiod_names)
 
 
 L(
@@ -61,7 +58,7 @@ from .est_survey import ae_approach_los
 trip_approach_distances, ae_los = ae_approach_los(trips)
 
 L("## sample_dest_zones_and_data ##")
-TRIP_ALTS_CACHE_FILE = "trip_alts_v3"
+TRIP_ALTS_CACHE_FILE = "trip_alts_v5"
 
 trip_alt_df = dh.filenames.load(TRIP_ALTS_CACHE_FILE)
 if trip_alt_df is None:
@@ -110,12 +107,14 @@ if trip_alt_df is None:
 
 
 	L("## invalid_walktime ##")
-	invalid_walktime = trip_alt_df['transit_approach_walktime'] > 180
-	trip_alt_df.loc[invalid_walktime, 'transit_approach_walktime'] = np.nan
+	for purpose3 in ['HW', 'HO', 'NH']:
+		invalid_walktime = trip_alt_df[f'actualdest_transit_approach_walktime_{purpose3}'] > 180
+		trip_alt_df.loc[invalid_walktime, f'actualdest_transit_approach_walktime_{purpose3}'] = np.nan
 
 	L("## invalid_drivetime ##")
-	invalid_drivetime = trip_alt_df['transit_approach_drivetime'] > 180
-	trip_alt_df.loc[invalid_drivetime, 'transit_approach_drivetime'] = np.nan
+	for purpose3 in ['HW', 'HO', 'NH']:
+		invalid_drivetime = trip_alt_df[f'actualdest_transit_approach_drivetime_{purpose3}'] > 180
+		trip_alt_df.loc[invalid_drivetime, f'actualdest_transit_approach_drivetime_{purpose3}'] = np.nan
 
 	for i in range(n_sampled_dests):
 		for purpose in ['HW', 'HO', 'NH']:
@@ -136,7 +135,7 @@ if trip_alt_df is None:
 				v = result_purpose[key][:, 0].astype(float)
 				if key in ['drivetime', 'walktime', 'waittime']:
 					v[v > 180] = np.nan
-				trip_alt_df.loc[q, f'altdest{i + 1:04d}_transit_approach_{key}'] = v
+				trip_alt_df.loc[q, f'altdest{i + 1:04d}_transit_approach_{key}_{purpose}'] = v
 
 	dh.filenames.save(TRIP_ALTS_CACHE_FILE, trip_alt_df)
 
@@ -145,7 +144,6 @@ base_mode_names = list(trips.mode5.cat.categories)
 from ..choice_model import alt_codes_and_names
 
 alt_codes, alt_names = alt_codes_and_names(
-	n_timeperiods=n_timeperiods,
 	n_sampled_dests=n_sampled_dests,
 	modenames=None,
 	include_actual_dest=True,
@@ -172,7 +170,10 @@ altdest_tags = lambda suffix: [
 
 # `ca_folds` defines how ca_folded (see below) is built
 ca_folds = {
-	"nAttractions": ['actualdest_attractions'] + altdest_tags("attractions"),
+	"nAttractions_HBWH": ['actualdest_log_attractions_HBWH'] + altdest_tags("log_attractions_HBWH"),
+	"nAttractions_HBWL": ['actualdest_log_attractions_HBWL'] + altdest_tags("log_attractions_HBWL"),
+	"nAttractions_HBO": ['actualdest_log_attractions_HBO'] + altdest_tags("log_attractions_HBO"),
+	"nAttractions_NHB": ['actualdest_log_attractions_NHB'] + altdest_tags("log_attractions_NHB"),
 	"auto_dist": ['auto_dist'] + altdest_tags("auto_dist"),
 	"auto_time": ['auto_time'] + altdest_tags("auto_time"),
 }
@@ -190,52 +191,67 @@ for purpose, purpose_a in purposes:
 
 	# assemble quantitative (size) factors
 	#   We use the attractions defined in the model's Trip Generation step.
+	log.debug(f"size_of_altdests for {purpose}")
 	size_of_altdests = [
-		np.fmax(
+		np.log(np.fmax(
 			dh.trip_attractions.loc[
 				trip_alt_df[q][f"altdest{i + 1:04d}"],
 				purpose_a,
 			].reset_index(
 				drop=True
-			).rename(
-				f'altdest{i + 1:04d}_attractions'
 			),
 			1e-300,  # nonzero but tiny
+		)).rename(
+			f'altdest{i + 1:04d}_log_attractions_{purpose}'
 		)
 		for i in range(n_sampled_dests)
 	]
 
+	log.debug(f"actualdest_log_attractions for {purpose}")
 	_df = pd.concat(
 		[
 			trip_alt_df[q].reset_index(),
-			np.fmax(
+			np.log(np.fmax(
 				dh.trip_attractions.loc[
 					trips[q].d_zone,
 					purpose_a,
 				].reset_index(
 					drop=True
-				).rename(
-					'actualdest_attractions'
 				),
 				1e-300,  # nonzero but tiny
+			)).rename(
+				f'actualdest_log_attractions_{purpose}'
 			),
 		] + size_of_altdests,
 		axis=1,
 	)
 
+	purpose4to3 = {
+		'HBWH': 'HW',
+		'HBWL': 'HW',
+		'HBO': 'HO',
+		'NHB': 'NH',
+	}
+
+	peaky = 'PEAK' if 'W' in purpose else 'OFFPEAK'
 	for i in range(n_sampled_dests):
-		for t in timeperiod_names:
-			_df[f'altdest{i + 1:04d}_transit_avail_{t}'] = (
-				(  _df[f'altdest{i + 1:04d}_transit_ivtt_{t}'] < 999)
-				& (_df[f'altdest{i + 1:04d}_transit_approach_walktime'] < 999)
-				& (_df[f'altdest{i + 1:04d}_transit_approach_drivetime'] < 999)
-				& (_df[f'altdest{i + 1:04d}_attractions'] > 1e-290)
-			)
-		_df[f'altdest{i + 1:04d}_auto_avail'] = (_df[f'altdest{i + 1:04d}_attractions'] > 1e-290)
+		positive_attractions = (_df[f'altdest{i + 1:04d}_log_attractions_{purpose}'] > -666)
+		_df[f'altdest{i + 1:04d}_transit_avail_{purpose}'] = (
+			(  _df[f'altdest{i + 1:04d}_transit_ivtt_{peaky}'] < 999)
+			& (_df[f'altdest{i + 1:04d}_transit_approach_walktime_{purpose4to3[purpose]}'] < 999)
+			& (_df[f'altdest{i + 1:04d}_transit_approach_drivetime_{purpose4to3[purpose]}'] < 999)
+			& positive_attractions
+		)
+		_df[f'altdest{i + 1:04d}_auto_avail_{purpose}'] = positive_attractions
 	# Build IDCA folded data for later analysis
 	_ca_folded = {}
 	for k, v in ca_folds.items():
-		folder = _df[v]
+		if 'nAttractions' in k:
+			if purpose not in k:
+				continue
+			folder = np.exp(_df[v])
+		else:
+			folder = _df[v]
 		folder.columns = range(len(v))
 		_ca_folded[k] = folder.stack().rename(k)
 	ca_folded[purpose] = pd.DataFrame(_ca_folded)
@@ -245,7 +261,7 @@ for purpose, purpose_a in purposes:
 		co=_df,
 		alt_codes=alt_codes,
 		alt_names=alt_names,
-		ch='mode_and_time',
+		ch='mode5code',
 		# av=pd.DataFrame({
 		# 	k: _df.eval(v)
 		# 	for k, v in av.items()
@@ -264,6 +280,7 @@ for purpose, purpose_a in purposes:
 			include_actual_dest=True,
 			n_sampled_dests=n_sampled_dests,
 			parameter_values=None,
+			constraints=False,
 		)
 		mods_preload[purpose] = False
 	m.dataservice = dfs
@@ -320,7 +337,7 @@ L("## model parameter estimation ##")
 
 Pr = Dict()
 
-nests_per_dest = 7 # CHANGE ME if/when the number of nests per destination is altered in `model_builder`
+nests_per_dest = 2 # CHANGE ME if/when the number of nests per destination is altered in `model_builder`
 
 
 
@@ -329,7 +346,7 @@ figures = Dict()
 def dest_profiler(
 	purpose,
 ):
-	_offset = (n_sampled_dests + 1) * 5*n_timeperiods+nests_per_dest-1
+	_offset = (n_sampled_dests + 1) * 5+nests_per_dest-1
 	_ch = mods[purpose].dataframes.data_ch_cascade(mods[purpose].graph)\
 		      .iloc[:, _offset:-1:nests_per_dest].stack().values
 	_av = mods[purpose].dataframes.data_av_cascade(mods[purpose].graph)\
@@ -374,18 +391,16 @@ def mode_share_profiler(
 	_pr = Pr.ByMode[purpose].copy()
 	_pr.columns = pd.MultiIndex.from_product([
 		d_codes,
-		timeperiod_names,
 		['AUTO', 'TAXI', 'TNC1', 'TNC2', 'TRANSIT'],
 	])
-	_pr = _pr.stack([0,2]).sum(1).unstack()
+	# _pr = _pr.stack([0,2]).sum(1).unstack()
 
 	_ch = mods[purpose].dataframes.data_ch.copy()
 	_ch.columns=pd.MultiIndex.from_product([
 		d_codes,
-		timeperiod_names,
 		['AUTO', 'TAXI', 'TNC1', 'TNC2', 'TRANSIT'],
 	])
-	_ch = _ch.stack([0,2]).sum(1).unstack()
+	# _ch = _ch.stack([0,2]).sum(1).unstack()
 
 	figdef = Dict()
 	figdef['auto_dist'].bins = np.logspace(np.log10(1),np.log10(51),10)-1
@@ -415,60 +430,60 @@ def mode_share_profiler(
 		)
 		display(figures.share[purpose][x])
 
-def timeshare_profiler(purpose):
-	d_codes = np.arange(n_sampled_dests + 1)
-
-	_pr = Pr.ByMode[purpose].copy()
-	_pr.columns = pd.MultiIndex.from_product([
-		d_codes,
-		timeperiod_names,
-		['AUTO', 'TAXI', 'TNC1', 'TNC2', 'TRANSIT'],
-	])
-	_pr1 = _pr.stack([1, 2]).sum(1).unstack([1, 2]).sum().unstack().reindex(timeperiod_names)
-
-	_ch = mods[purpose].dataframes.data_ch.copy()
-	_ch.columns = pd.MultiIndex.from_product([
-		d_codes,
-		timeperiod_names,
-		['AUTO', 'TAXI', 'TNC1', 'TNC2', 'TRANSIT'],
-	])
-	_ch1 = _ch.stack([1, 2]).sum(1).unstack([1, 2]).sum().unstack().reindex(timeperiod_names)
-
-	_pr_detail = _pr1.drop(columns=['AUTO'])
-	_pr_gross = pd.DataFrame([
-		_pr1.AUTO, _pr_detail.sum(1).rename("OTHER"),
-	]).T
-
-	_ch_detail = _ch1.drop(columns=['AUTO'])
-	_ch_gross = pd.DataFrame([
-		_ch1.AUTO, _ch_detail.sum(1).rename("OTHER"),
-	]).T
-
-	from matplotlib import pyplot as plt
-	fig, axs = plt.subplots(
-		2, 2,
-		figsize=(12, 10),
-		sharey='row', sharex='col',
-		gridspec_kw={'wspace': 0.1, 'hspace': 0.1}
-	)
-	_ch_gross.plot(kind='bar', stacked=True, ax=axs[0][1])
-	_pr_gross.plot(kind='bar', stacked=True, ax=axs[0][0])
-	_ch_detail.plot(kind='bar', stacked=True, ax=axs[1][1])
-	_pr_detail.plot(kind='bar', stacked=True, ax=axs[1][0])
-	axs[0][0].set_title("Modeled Time Periods")
-	axs[0][1].set_title("Observed Time Periods")
-	axs[0][0].set_ylabel("Relative Frequency")
-	axs[1][0].set_ylabel("Relative Frequency")
-	axs[0][0].set_yticks([])
-	axs[1][0].set_yticks([])
-
-	from larch.util.png import make_png
-	result = make_png(fig)
-	fig.clf()
-	plt.close(fig)
-
-	figures.timeshare[purpose] = result
-	display(result)
+# def timeshare_profiler(purpose):
+# 	d_codes = np.arange(n_sampled_dests + 1)
+#
+# 	_pr = Pr.ByMode[purpose].copy()
+# 	_pr.columns = pd.MultiIndex.from_product([
+# 		d_codes,
+# 		timeperiod_names,
+# 		['AUTO', 'TAXI', 'TNC1', 'TNC2', 'TRANSIT'],
+# 	])
+# 	_pr1 = _pr.stack([1, 2]).sum(1).unstack([1, 2]).sum().unstack().reindex(timeperiod_names)
+#
+# 	_ch = mods[purpose].dataframes.data_ch.copy()
+# 	_ch.columns = pd.MultiIndex.from_product([
+# 		d_codes,
+# 		timeperiod_names,
+# 		['AUTO', 'TAXI', 'TNC1', 'TNC2', 'TRANSIT'],
+# 	])
+# 	_ch1 = _ch.stack([1, 2]).sum(1).unstack([1, 2]).sum().unstack().reindex(timeperiod_names)
+#
+# 	_pr_detail = _pr1.drop(columns=['AUTO'])
+# 	_pr_gross = pd.DataFrame([
+# 		_pr1.AUTO, _pr_detail.sum(1).rename("OTHER"),
+# 	]).T
+#
+# 	_ch_detail = _ch1.drop(columns=['AUTO'])
+# 	_ch_gross = pd.DataFrame([
+# 		_ch1.AUTO, _ch_detail.sum(1).rename("OTHER"),
+# 	]).T
+#
+# 	from matplotlib import pyplot as plt
+# 	fig, axs = plt.subplots(
+# 		2, 2,
+# 		figsize=(12, 10),
+# 		sharey='row', sharex='col',
+# 		gridspec_kw={'wspace': 0.1, 'hspace': 0.1}
+# 	)
+# 	_ch_gross.plot(kind='bar', stacked=True, ax=axs[0][1])
+# 	_pr_gross.plot(kind='bar', stacked=True, ax=axs[0][0])
+# 	_ch_detail.plot(kind='bar', stacked=True, ax=axs[1][1])
+# 	_pr_detail.plot(kind='bar', stacked=True, ax=axs[1][0])
+# 	axs[0][0].set_title("Modeled Time Periods")
+# 	axs[0][1].set_title("Observed Time Periods")
+# 	axs[0][0].set_ylabel("Relative Frequency")
+# 	axs[1][0].set_ylabel("Relative Frequency")
+# 	axs[0][0].set_yticks([])
+# 	axs[1][0].set_yticks([])
+#
+# 	from larch.util.png import make_png
+# 	result = make_png(fig)
+# 	fig.clf()
+# 	plt.close(fig)
+#
+# 	figures.timeshare[purpose] = result
+# 	display(result)
 
 
 def mode_choice_summary(m):
@@ -483,10 +498,9 @@ def mode_choice_summary(m):
 	ch_av_summary.index = pd.MultiIndex.from_product(
 		[
 			np.arange(n_sampled_dests + 1),
-			timeperiod_names,
 			['AUTO', 'TAXI', 'TNC1', 'TNC2', 'TRANSIT'],
 		],
-		names=['dest', 'timeperiod', 'mode'],
+		names=['dest', 'mode'],
 	)
 	result = ch_av_summary.groupby('mode').sum()
 	display(HTML(f"<h4>{m.title} Mode Choices Summary</h4>"))
@@ -496,7 +510,7 @@ def mode_choice_summary(m):
 def estimation():
 	for purpose, m in mods.items():
 
-		if purpose != 'HBWH': continue # TODO stop short circuit
+		# if purpose != 'HBWH': continue # TODO stop short circuit
 
 		m.dataframes.autoscale_weights()
 		display(HTML(f"<h3>{m.title}</h3>"))
@@ -513,7 +527,7 @@ def estimation():
 			display(larch.util.dictx(summary).__xml__())
 			display(m.estimation_statistics())
 		_pr = m.probability(return_dataframe='names', include_nests=True)
-		n_elemental_alts = (n_sampled_dests+1)*5*n_timeperiods
+		n_elemental_alts = (n_sampled_dests+1)*5
 		Pr.ByDest[purpose] = _pr.iloc[:,n_elemental_alts+nests_per_dest-1:-1:nests_per_dest]
 		Pr.ByMode[purpose] = _pr.iloc[:,:n_elemental_alts]
 
@@ -544,14 +558,6 @@ def estimation():
 		else:
 			mode_share_profiler_success = True
 
-		try:
-			timeshare_profiler(purpose)
-		except:
-			log.exception("exception in timeshare_profiler")
-			time_share_profiler_success = False
-		else:
-			time_share_profiler_success = True
-
 		xl = m.to_xlsx(
 			cached_model_filereport(purpose),
 			save_now=False
@@ -572,12 +578,6 @@ def estimation():
 				figures.share[purpose]['auto_dist'],
 				sheetname="Figures",
 				heading="Mode Choice by Distance",
-			)
-		if time_share_profiler_success:
-			xl.add_content_tab(
-				figures.timeshare[purpose],
-				sheetname="Figures",
-				heading="Mode Choice by Time of Day",
 			)
 		xl.save()
 
